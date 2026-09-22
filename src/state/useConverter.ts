@@ -4,6 +4,7 @@ import { validateFile } from "../lib/image/validate";
 import { vectorize } from "../lib/engine/vectorizeClient";
 import {
   AppError,
+  ConversionCancelled,
   DEFAULT_OPTIONS,
   type ConversionOptions,
   type ConversionResult,
@@ -20,6 +21,7 @@ interface ConverterState {
   options: ConversionOptions;
   result: ConversionResult | null;
   errorMessage: string | null;
+  errorHint: string | null;
   errorRecovery: ErrorRecovery | null;
 }
 
@@ -31,7 +33,8 @@ type Action =
   | { type: "READY"; decoded: DecodedImage }
   | { type: "CONVERT_START" }
   | { type: "CONVERT_SUCCESS"; result: ConversionResult }
-  | { type: "ERROR"; message: string; recovery: ErrorRecovery }
+  | { type: "CONVERT_CANCELLED" }
+  | { type: "ERROR"; message: string; hint: string; recovery: ErrorRecovery }
   | { type: "SET_OPTIONS"; options: Partial<ConversionOptions> }
   | { type: "RESET" };
 
@@ -43,6 +46,7 @@ const initialState: ConverterState = {
   options: DEFAULT_OPTIONS,
   result: null,
   errorMessage: null,
+  errorHint: null,
   errorRecovery: null,
 };
 
@@ -53,17 +57,21 @@ function reducer(state: ConverterState, action: Action): ConverterState {
     case "DRAG_LEAVE":
       return state.stage === "dragActive" ? { ...state, stage: "empty" } : state;
     case "FILE_SELECTED":
-      return { ...state, stage: "fileSelected", errorMessage: null, errorRecovery: null, result: null };
+      return { ...state, stage: "fileSelected", errorMessage: null, errorHint: null, errorRecovery: null, result: null };
     case "PREPARING":
       return { ...state, stage: "preparing", file: action.file, previewUrl: action.previewUrl, decoded: null };
     case "READY":
       return { ...state, stage: "ready", decoded: action.decoded };
     case "CONVERT_START":
-      return { ...state, stage: "converting", errorMessage: null, errorRecovery: null };
+      return { ...state, stage: "converting", errorMessage: null, errorHint: null, errorRecovery: null };
     case "CONVERT_SUCCESS":
       return { ...state, stage: "success", result: action.result };
+    case "CONVERT_CANCELLED":
+      // Cancelling isn't a failure — go straight back to "ready", same as
+      // before the user hit Convert. No error state, nothing to recover from.
+      return { ...state, stage: "ready" };
     case "ERROR":
-      return { ...state, stage: "error", errorMessage: action.message, errorRecovery: action.recovery };
+      return { ...state, stage: "error", errorMessage: action.message, errorHint: action.hint, errorRecovery: action.recovery };
     case "SET_OPTIONS":
       return { ...state, options: { ...state.options, ...action.options } };
     case "RESET":
@@ -76,10 +84,12 @@ function reducer(state: ConverterState, action: Action): ConverterState {
 export function useConverter() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const previewUrlRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     previewUrlRef.current = null;
+    abortControllerRef.current?.abort();
     dispatch({ type: "RESET" });
   }, []);
 
@@ -104,8 +114,8 @@ export function useConverter() {
       const appError =
         err instanceof AppError
           ? err
-          : new AppError("UNKNOWN", "Something went wrong reading that file.");
-      dispatch({ type: "ERROR", message: appError.message, recovery: appError.recovery });
+          : new AppError("UNKNOWN", "Something unexpected happened while reading this file.", "Try again, or choose a different image.");
+      dispatch({ type: "ERROR", message: appError.message, hint: appError.hint, recovery: appError.recovery });
     }
   }, []);
 
@@ -115,16 +125,30 @@ export function useConverter() {
 
   const convert = useCallback(async () => {
     if (!state.decoded) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     dispatch({ type: "CONVERT_START" });
     try {
-      const result = await vectorize(state.decoded, state.options);
+      const result = await vectorize(state.decoded, state.options, controller.signal);
       dispatch({ type: "CONVERT_SUCCESS", result });
     } catch (err) {
+      if (err instanceof ConversionCancelled) {
+        dispatch({ type: "CONVERT_CANCELLED" });
+        return;
+      }
       const appError =
-        err instanceof AppError ? err : new AppError("UNKNOWN", "Conversion failed on this image.");
-      dispatch({ type: "ERROR", message: appError.message, recovery: appError.recovery });
+        err instanceof AppError
+          ? err
+          : new AppError("UNKNOWN", "Something unexpected happened during conversion.", "Try again, or choose a different image.");
+      dispatch({ type: "ERROR", message: appError.message, hint: appError.hint, recovery: appError.recovery });
+    } finally {
+      if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
   }, [state.decoded, state.options]);
 
-  return { state, loadFile, setOptions, convert, reset, setDragActive };
+  const cancel = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
+  return { state, loadFile, setOptions, convert, cancel, reset, setDragActive };
 }

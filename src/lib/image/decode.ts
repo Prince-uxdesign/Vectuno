@@ -14,9 +14,12 @@ export async function decodeImage(
   try {
     bitmap = await createImageBitmap(file);
   } catch {
+    // The browser could read the file but not decode it as image data — this
+    // is a property of the file itself, not the browser's capabilities.
     throw new AppError(
-      "DECODE_FAILED",
-      "That image couldn't be decoded. It may be corrupted or in an unsupported format."
+      "CORRUPTED_FILE",
+      "This image couldn't be read — it may be corrupted or saved in an unsupported way.",
+      "Try exporting or saving the image again, then upload it."
     );
   }
 
@@ -34,7 +37,13 @@ export async function decodeImage(
   canvas.height = processedHeight;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) {
-    throw new AppError("DECODE_FAILED", "This browser can't process images (canvas unavailable).");
+    // The file was fine — this browser/environment can't give us a 2D canvas
+    // context at all, which is a browser capability problem, not the file's fault.
+    throw new AppError(
+      "BROWSER_UNSUPPORTED",
+      "Your browser doesn't support the image processing this conversion needs.",
+      "Try a recent version of Chrome, Firefox, Safari, or Edge."
+    );
   }
   ctx.drawImage(bitmap, 0, 0, processedWidth, processedHeight);
   bitmap.close();
@@ -43,7 +52,11 @@ export async function decodeImage(
   try {
     imageData = ctx.getImageData(0, 0, processedWidth, processedHeight);
   } catch {
-    throw new AppError("DECODE_FAILED", "That image couldn't be read after decoding.");
+    throw new AppError(
+      "BROWSER_UNSUPPORTED",
+      "Your browser blocked reading the image after decoding it.",
+      "Try a recent version of Chrome, Firefox, Safari, or Edge."
+    );
   }
 
   return {

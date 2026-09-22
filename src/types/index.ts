@@ -12,20 +12,25 @@ export type AcceptedMimeType = (typeof ACCEPTED_MIME_TYPES)[number];
 export const ACCEPTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"] as const;
 
 export type ColorMode = "color" | "bw";
-export type DetailLevel = "low" | "medium" | "high";
+export type Level = "low" | "medium" | "high";
 
 export interface ConversionOptions {
   colorMode: ColorMode;
-  numberOfColors: number; // 2-64, ignored when colorMode === "bw"
-  detail: DetailLevel; // controls path/quad thresholds
-  smoothing: number; // 0-1, higher = smoother/simpler paths
+  // Advanced/optional — only meaningful (and only shown) when colorMode is "color".
+  numberOfColors: number; // 2-64
+  // Which shapes get kept: low = only large/major shapes, high = keep small detail too.
+  detail: Level;
+  // How tightly traced curves follow the pixel boundary: low = precise/jagged,
+  // high = loose/simplified. Verified independent of `detail` — same shapes,
+  // fewer curve control points as smoothness increases.
+  smoothness: Level;
 }
 
 export const DEFAULT_OPTIONS: ConversionOptions = {
   colorMode: "color",
   numberOfColors: 16,
   detail: "medium",
-  smoothing: 0.5,
+  smoothness: "medium",
 };
 
 export interface DecodedImage {
@@ -54,14 +59,18 @@ export type Stage =
   | "ready" // decoded successfully, waiting for the user to hit Convert
   | "converting" // vectorization running in the worker
   | "success" // SVG produced
-  | "error"; // something failed; errorMessage explains what and errorAction how to recover
+  | "error"; // something failed; errorMessage/errorHint explain what + what to do, errorRecovery how
 
+// The 7 distinct failure categories this product can actually produce.
+// Each maps to a specific cause, not a generic catch-all — see
+// RECOVERY_BY_CODE and the throw sites in lib/image + lib/engine for exactly
+// which condition raises which code.
 export type AppErrorCode =
   | "UNSUPPORTED_FILE"
   | "FILE_TOO_LARGE"
   | "DIMENSIONS_TOO_LARGE"
   | "CORRUPTED_FILE"
-  | "DECODE_FAILED"
+  | "BROWSER_UNSUPPORTED"
   | "VECTORIZE_FAILED"
   | "UNKNOWN";
 
@@ -74,7 +83,7 @@ const RECOVERY_BY_CODE: Record<AppErrorCode, ErrorRecovery> = {
   FILE_TOO_LARGE: "chooseNew",
   DIMENSIONS_TOO_LARGE: "chooseNew",
   CORRUPTED_FILE: "chooseNew",
-  DECODE_FAILED: "chooseNew",
+  BROWSER_UNSUPPORTED: "chooseNew",
   VECTORIZE_FAILED: "retry",
   UNKNOWN: "chooseNew",
 };
@@ -82,10 +91,24 @@ const RECOVERY_BY_CODE: Record<AppErrorCode, ErrorRecovery> = {
 export class AppError extends Error {
   code: AppErrorCode;
   recovery: ErrorRecovery;
-  constructor(code: AppErrorCode, message: string) {
+  /** The actionable next step, shown as a second line — e.g. "Try a smaller image." */
+  hint: string;
+  constructor(code: AppErrorCode, message: string, hint: string) {
     super(message);
     this.code = code;
     this.recovery = RECOVERY_BY_CODE[code];
+    this.hint = hint;
     this.name = "AppError";
+  }
+}
+
+// Thrown (never surfaced as an "error" state) when the user cancels an
+// in-progress conversion. Distinct from AppError on purpose: cancelling
+// isn't a failure, so useConverter catches this separately and returns to
+// "ready" instead of "error".
+export class ConversionCancelled extends Error {
+  constructor() {
+    super("Conversion cancelled");
+    this.name = "ConversionCancelled";
   }
 }

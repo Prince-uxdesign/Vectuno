@@ -45,12 +45,72 @@ booleans:
 empty → dragActive → fileSelected → preparing → ready → converting → success
                                          ↓            ↑        ↓
                                        error ──────────┴────────┘
+                                     (cancel returns converting → ready directly,
+                                      not through error — see Cancellation below)
 ```
 
-`error` carries a `recovery` hint (`"retry"` vs `"chooseNew"`) so the UI
-always offers the right next action: a conversion failure keeps the file and
+`error` carries a `message`, `hint` (the actionable next step, e.g. "Try a
+smaller image"), and `recovery` (`"retry"` vs `"chooseNew"`) so the UI always
+offers the right next action: a conversion failure keeps the file and
 settings on screen with a "Try again" button; an upload/validation failure
 shows "Choose a different image" since the file itself is the problem.
+
+## Conversion settings
+
+Three core settings, mapped to `imagetracerjs` parameters that were verified
+— not assumed — to actually change output (`npm run test:settings`):
+
+| Setting | User sees | Engine parameter | Verified effect |
+|---|---|---|---|
+| Mode | Color / Monochrome | `numberofcolors` (2 vs. user value) | obvious |
+| Detail | Low / Medium / High | `pathomit` (30 / 8 / 1) | path count only — which shapes survive |
+| Smoothness | Low / Medium / High | `ltres`/`qtres` (0.2 / 1 / 4) | file size only, same path count — curve simplification |
+
+Detail and Smoothness were deliberately re-derived this phase after testing
+showed the original mapping was wrong: `pathomit` and `ltres`/`qtres` were
+both lumped under "Detail," and a candidate "Smoothness" built on
+`blurradius` actually *increased* path count on flat art (pre-blur
+anti-aliasing gets quantized into extra color bands) — the opposite of what
+"smoothness" should do. Blurring was cut entirely rather than shipped as a
+control that sometimes makes output worse. The current mapping keeps Detail
+and Smoothness independent: Detail changes *what* gets traced, Smoothness
+changes *how* the curves are fit, and `scripts/benchmark-settings.mjs`
+asserts that relationship holds (monotonic path count for Detail, monotonic
+size for Smoothness) on every run.
+
+**Advanced** (collapsed `<details>`, Color mode only): a 2–64 "Colors" slider
+(`numberofcolors` directly). This is the one continuous/technical control
+still exposed — kept out of the core three because the brief's settings list
+doesn't include it, but it's real and worth keeping for users who want finer
+control than three color-mode-adjacent buckets.
+
+**Not implemented: Background Keep/Remove.** `imagetracerjs` has no
+background-detection or removal capability — it traces whatever pixels are
+there, preserving existing alpha as per-path opacity. Building real
+background removal would mean writing new segmentation logic, not mapping an
+existing engine parameter, which is out of scope for "map the engine's
+parameters to friendly controls." Skipped per "only expose settings that
+genuinely work," not shipped as a no-op toggle.
+
+**Defaults:** Mode=Color, Detail=Medium, Smoothness=Medium, Colors=16 —
+tested to work well across the fixture set without any adjustment.
+
+## Processing state & cancellation
+
+`imagetracerjs`'s `imagedataToSVG` is a single synchronous call with no
+internal yield points or progress hook (confirmed in the Phase 1 engine
+evaluation) — so only two stages are real and honestly reportable:
+**"Preparing image"** (decode) and **"Vectorizing your image"** (the worker
+call). Fabricated intermediate stages ("Analyzing," "Tracing," "Optimizing")
+were deliberately not added — there's no way to know which is actually
+happening inside an opaque synchronous call.
+
+Cancellation is real, not cosmetic: each conversion runs in its own
+freshly-created Worker (see `vectorizeClient.ts`), so cancelling just calls
+`AbortController.abort()`, which terminates that worker outright. Since
+nothing is shared between conversions, terminating mid-run can't corrupt
+state — the same mechanism the 30s timeout already used. Cancelling returns
+straight to `ready` (not `error`): it isn't a failure.
 
 ## Project structure
 
@@ -73,11 +133,14 @@ src/
                         valid vs. unsupported drag (icon + text, not color alone)
     FilePreview           contained thumbnail + "Change image"
     FileMetadata           name / type / size / dimensions
-    ConversionSettings     color mode, colors, detail, smoothing (all real, all wired)
-    ConversionStatus       status text + the Convert trigger
+    ConversionSettings     Mode/Detail/Smoothness (segmented, checkmark + bold
+                           on selection, not color alone) + collapsed Advanced
+    ConversionStatus       headline+subtext status, Convert trigger, Cancel
+                           button while converting
     ResultPreview           original + SVG side-by-side + SVG stats
     DownloadButton          derives "name.svg" from the source filename
-    ErrorState              icon + message + recovery-appropriate action(s)
+    ErrorState              icon + message + hint (what happened / what to do)
+                           + recovery-appropriate action(s)
   App.tsx           Composes everything off `state.stage`
 scripts/            Test fixture generation, benchmark, e2e/visual probes
 docs/               Technical evaluation
@@ -96,17 +159,20 @@ npm run dev
 ```
 npm run test:fixtures    # regenerate test/fixtures/*.png|jpg|webp (12 categories)
 npm run test:benchmark   # run imagetracerjs against all fixtures, print size/paths/time
-npm run test:e2e         # Phase 1 smoke test (Playwright)
-npm run test:e2e-full    # full user-journey suite: 129 assertions across 7 image
+npm run test:settings    # verify Detail/Smoothness are monotonic on real fixtures
+                         # (fails the build if a future preset change breaks that)
+npm run test:e2e         # full user-journey suite: 143 assertions across 7 image
                          # types, 9 breakpoints, keyboard/touch, rejection/corruption/
-                         # timeout errors, replace-image, sequential conversions
+                         # timeout errors, replace-image, sequential conversions,
+                         # settings-changes-output, Advanced disclosure, cancellation,
+                         # no-accidental-auto-convert
 npm run test:visual      # screenshots + real DataTransfer drag events,
                          # long-filename overflow, disabled-state checks
 npm run test:design      # full-page landing screenshots at all 10 required
                          # breakpoints (320–1920px)
 ```
 
-`test:e2e`, `test:e2e-full`, and `test:visual` all require the dev server
+`test:e2e`, `test:visual`, and `test:design` all require the dev server
 running separately first:
 
 ```
@@ -114,11 +180,23 @@ npx vite --port 5185
 ```
 
 All of the above run against a real, unmodified build of the app in actual
-Chromium — nothing is mocked except the one deliberately-forced-failure case
-in `e2e-full.mjs`, which overrides `Worker.postMessage` to verify the error
-UI without needing to organically break a working vectorizer.
+Chromium — nothing is mocked except two deliberately-forced conditions in
+`e2e-full.mjs`: a `Worker.postMessage` override to verify the error UI
+without needing to organically break a working vectorizer, and a delayed
+`postMessage` to open a real window to cancel in.
 
 Playwright is a devDependency only — it never ships in the app bundle.
+
+## A TypeScript gotcha worth knowing about
+
+`npx tsc --noEmit` silently checks **nothing** in this repo — the root
+`tsconfig.json` has `"files": []` and delegates to `tsconfig.app.json` /
+`tsconfig.node.json` via project references, which plain `tsc` doesn't
+follow. It exits 0 even with real type errors sitting in modified files.
+Caught this the hard way mid-phase: a type error survived several
+`tsc --noEmit` "clean" checks in a row. Use `npx tsc -b --noEmit` (build
+mode, follows references) or just `npm run build` — never bare
+`tsc --noEmit` — when verifying this project actually typechecks.
 
 ## A cascade bug worth knowing about
 
@@ -142,10 +220,13 @@ Product-level, as of this phase:
 
 - No SVG post-optimization pass (e.g. SVGO) — output is `imagetracerjs`'s raw
   SVG.
-- No true progress percentage during conversion — the engine has no progress
-  hook, so `ConversionStatus` shows an honest indeterminate spinner rather
-  than a fabricated percentage.
+- No true progress percentage or intermediate stages during conversion — the
+  engine has no progress hook, so `ConversionStatus` shows two honest stages
+  (Preparing / Vectorizing) with an indeterminate spinner, not a fabricated
+  percentage or made-up steps like "Analyzing" / "Optimizing."
 - No batch/multi-file upload — one image at a time, by design for this phase.
+- No Background Keep/Remove setting — `imagetracerjs` has no background
+  detection/removal capability to map; see "Conversion settings" above.
 - "How it works" and "About" are anchors on the same page, not separate
   routes — intentional, since this isn't a multi-page product. Nav collapses
   to just Logo + "Start converting" below 640px rather than adding a
