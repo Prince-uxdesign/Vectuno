@@ -43,7 +43,7 @@ function Segmented<T extends string>({
                   <path
                     d="M3.5 8.5L6.5 11.5L12.5 4.5"
                     stroke="currentColor"
-                    strokeWidth="1.8"
+                    strokeWidth="1.75"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     fill="none"

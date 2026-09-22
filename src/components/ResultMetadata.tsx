@@ -1,14 +1,10 @@
+import { formatBytes } from "../lib/utils/format";
+
 interface ResultMetadataProps {
   width: number;
   height: number;
   sizeBytes: number;
   pathCount: number;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function ResultMetadata({ width, height, sizeBytes, pathCount }: ResultMetadataProps) {

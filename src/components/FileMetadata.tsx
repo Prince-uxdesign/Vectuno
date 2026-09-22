@@ -1,3 +1,5 @@
+import { formatBytes } from "../lib/utils/format";
+
 interface FileMetadataProps {
   name: string;
   mimeType: string;
@@ -11,12 +13,6 @@ const MIME_LABELS: Record<string, string> = {
   "image/jpeg": "JPEG",
   "image/webp": "WebP",
 };
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export function FileMetadata({ name, mimeType, sizeBytes, width, height }: FileMetadataProps) {
   const typeLabel = MIME_LABELS[mimeType] ?? mimeType.replace("image/", "").toUpperCase();
