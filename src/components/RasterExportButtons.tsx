@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { deriveExportFilename } from "../lib/utils/filename";
 import { rasterizeSvg, type RasterFormat } from "../lib/utils/rasterExport";
+import { triggerBlobDownload } from "../lib/utils/download";
 import { Button } from "./ui/Button";
 
 interface RasterExportButtonsProps {
@@ -8,17 +9,6 @@ interface RasterExportButtonsProps {
   width: number;
   height: number;
   sourceFilename: string;
-}
-
-function triggerBlobDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 export function RasterExportButtons({ svg, width, height, sourceFilename }: RasterExportButtonsProps) {
