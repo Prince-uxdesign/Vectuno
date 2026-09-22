@@ -4,6 +4,7 @@ import { hasTransparency } from "../lib/image/transparency";
 import { CompareSlider } from "./CompareSlider";
 import { ResultMetadata } from "./ResultMetadata";
 import { DownloadButton } from "./DownloadButton";
+import { CopySvgButton } from "./CopySvgButton";
 import { Button } from "./ui/Button";
 
 interface ResultPreviewProps {
@@ -75,6 +76,7 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
             <Button variant="secondary" onClick={onConvertAnother}>
               Convert another image
             </Button>
+            <CopySvgButton svg={result.svg} />
           </div>
 
           {downloadFailed && (
