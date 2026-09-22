@@ -92,6 +92,13 @@ function App() {
         {showWorkspace && (
           <Section compact>
             <Container wide>
+              {/* Focus target when the workspace replaces the upload zone, so
+                  keyboard focus is never dropped to <body>. Visually hidden:
+                  sighted users already see the preview; this is a screen
+                  reader landmark for the new screen. */}
+              <h2 ref={workspaceHeadingRef} className="visually-hidden" tabIndex={-1}>
+                Conversion workspace
+              </h2>
               <div className="workspace workspace--split">
                 <div className="workspace__media">
                   {state.previewUrl && (
@@ -174,10 +181,15 @@ function App() {
         )}
 
         {/* Persistent (not conditionally mounted) so screen readers reliably
-            announce the text change on success — see accessibility notes in
-            the phase README. */}
+            announce text changes — the ConversionStatus region covers the
+            busy states, this one covers file-ready (with the filename, which
+            the visual metadata alone wouldn't announce) and success. */}
         <p className="visually-hidden" role="status" aria-live="polite">
-          {state.stage === "success" ? "Vectorization complete. Preview and download are ready below." : ""}
+          {state.stage === "ready" && state.file
+            ? `Image ${state.file.name} loaded and ready to convert.`
+            : state.stage === "success"
+              ? "Vectorization complete. Preview and download are ready below."
+              : ""}
         </p>
 
         {isLanding && (
