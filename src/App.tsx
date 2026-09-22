@@ -1,4 +1,7 @@
+import { useCallback, useRef } from "react";
+import { Navigation } from "./components/Navigation";
 import { UploadZone } from "./components/UploadZone";
+import { HowItWorks } from "./components/HowItWorks";
 import { FilePreview } from "./components/FilePreview";
 import { FileMetadata } from "./components/FileMetadata";
 import { ConversionSettings } from "./components/ConversionSettings";
@@ -6,12 +9,16 @@ import { ConversionStatus } from "./components/ConversionStatus";
 import { ResultPreview } from "./components/ResultPreview";
 import { DownloadButton } from "./components/DownloadButton";
 import { ErrorState } from "./components/ErrorState";
+import { Button } from "./components/ui/Button";
+import { Container } from "./components/ui/Container";
+import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
 
 function App() {
   const { state, loadFile, setOptions, convert, reset, setDragActive } = useConverter();
+  const uploadZoneRef = useRef<HTMLDivElement>(null);
 
-  const showUpload = state.stage === "empty" || state.stage === "dragActive";
+  const isLanding = state.stage === "empty" || state.stage === "dragActive";
   // A conversion (not upload) failure keeps the file context on screen —
   // the file is fine, only the last convert attempt failed — so the user
   // can retry without re-selecting anything. An upload/decode failure means
@@ -26,99 +33,150 @@ function App() {
   const showResult = state.stage === "success";
   const showError = state.stage === "error";
 
+  const scrollToUpload = useCallback(() => {
+    if (!isLanding) {
+      reset();
+    }
+    // Wait a frame so the upload zone is back in the DOM after a reset.
+    requestAnimationFrame(() => {
+      uploadZoneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      uploadZoneRef.current?.focus();
+    });
+  }, [isLanding, reset]);
+
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <span className="app-header__logo">Vectuno</span>
-        <nav className="app-header__nav">
-          <a href="#">Convert</a>
-        </nav>
-      </header>
+      <Navigation onStartConverting={scrollToUpload} />
 
       <main className="app-main">
-        <div className="app-main__intro">
-          <h1>Image to Vector</h1>
-          <p>Upload a PNG, JPG, or WebP and convert it to a clean SVG — entirely in your browser.</p>
-        </div>
+        {isLanding && (
+          <Section className="hero" compact>
+            <Container>
+              <div className="hero__intro">
+                <h1 className="hero__heading">Turn raster images into clean vectors</h1>
+                <p className="hero__subheading">
+                  Upload a PNG, JPG, or WebP and get a crisp, editable SVG back — converted entirely in your
+                  browser. Nothing is uploaded to a server.
+                </p>
+              </div>
+            </Container>
 
-        {showUpload && (
-          <UploadZone
-            isDragActive={state.stage === "dragActive"}
-            onFile={loadFile}
-            onDragStateChange={setDragActive}
-          />
+            <Container wide>
+              <UploadZone
+                ref={uploadZoneRef}
+                isDragActive={state.stage === "dragActive"}
+                onFile={loadFile}
+                onDragStateChange={setDragActive}
+              />
+            </Container>
+          </Section>
         )}
 
         {showWorkspace && (
-          <div className="workspace workspace--split">
-            <div className="workspace__media">
-              {state.previewUrl && (
-                <FilePreview
-                  previewUrl={state.previewUrl}
-                  onChangeImage={reset}
-                  disabled={state.stage === "converting"}
-                />
-              )}
+          <Section compact>
+            <Container wide>
+              <div className="workspace workspace--split">
+                <div className="workspace__media">
+                  {state.previewUrl && (
+                    <FilePreview
+                      previewUrl={state.previewUrl}
+                      onChangeImage={reset}
+                      disabled={state.stage === "converting"}
+                    />
+                  )}
 
-              {state.file && (
-                <FileMetadata
-                  name={state.file.name}
-                  mimeType={state.file.type}
-                  sizeBytes={state.file.size}
-                  width={state.decoded?.originalWidth ?? null}
-                  height={state.decoded?.originalHeight ?? null}
-                />
-              )}
+                  {state.file && (
+                    <FileMetadata
+                      name={state.file.name}
+                      mimeType={state.file.type}
+                      sizeBytes={state.file.size}
+                      width={state.decoded?.originalWidth ?? null}
+                      height={state.decoded?.originalHeight ?? null}
+                    />
+                  )}
 
-              {state.decoded?.wasDownsampled && (
-                <p className="app-notice">
-                  This image was downsampled to {state.decoded.processedWidth}×{state.decoded.processedHeight} for
-                  processing (original {state.decoded.originalWidth}×{state.decoded.originalHeight}).
-                </p>
-              )}
-            </div>
+                  {state.decoded?.wasDownsampled && (
+                    <p className="app-notice">
+                      This image was downsampled to {state.decoded.processedWidth}×
+                      {state.decoded.processedHeight} for processing (original {state.decoded.originalWidth}×
+                      {state.decoded.originalHeight}).
+                    </p>
+                  )}
+                </div>
 
-            <div className="workspace__panel">
-              <ConversionSettings
-                options={state.options}
-                onChange={setOptions}
-                disabled={state.stage === "converting"}
-              />
+                <div className="workspace__panel">
+                  <ConversionSettings
+                    options={state.options}
+                    onChange={setOptions}
+                    disabled={state.stage === "converting"}
+                  />
 
-              {isRetryableError ? (
-                <ErrorState
-                  message={state.errorMessage ?? "Something went wrong."}
-                  recovery="retry"
-                  onRetry={convert}
-                  onChooseNew={reset}
-                />
-              ) : (
-                <ConversionStatus stage={state.stage} onConvert={convert} />
-              )}
-            </div>
-          </div>
+                  {isRetryableError ? (
+                    <ErrorState
+                      message={state.errorMessage ?? "Something went wrong."}
+                      recovery="retry"
+                      onRetry={convert}
+                      onChooseNew={reset}
+                    />
+                  ) : (
+                    <ConversionStatus stage={state.stage} onConvert={convert} />
+                  )}
+                </div>
+              </div>
+            </Container>
+          </Section>
         )}
 
         {showResult && state.result && state.previewUrl && state.file && (
-          <div className="workspace">
-            <ResultPreview sourcePreviewUrl={state.previewUrl} result={state.result} />
+          <Section compact>
+            <Container wide>
+              <div className="workspace">
+                <ResultPreview sourcePreviewUrl={state.previewUrl} result={state.result} />
 
-            <div className="workspace__actions">
-              <button type="button" className="app-secondary" onClick={reset}>
-                Convert another image
-              </button>
-              <DownloadButton svg={state.result.svg} sourceFilename={state.file.name} />
-            </div>
-          </div>
+                <div className="workspace__actions">
+                  <Button variant="secondary" onClick={reset}>
+                    Convert another image
+                  </Button>
+                  <DownloadButton svg={state.result.svg} sourceFilename={state.file.name} />
+                </div>
+              </div>
+            </Container>
+          </Section>
         )}
 
         {showError && !isRetryableError && (
-          <ErrorState
-            message={state.errorMessage ?? "Something went wrong."}
-            recovery={state.errorRecovery ?? "chooseNew"}
-            onRetry={convert}
-            onChooseNew={reset}
-          />
+          <Section compact>
+            <Container>
+              <ErrorState
+                message={state.errorMessage ?? "Something went wrong."}
+                recovery={state.errorRecovery ?? "chooseNew"}
+                onRetry={convert}
+                onChooseNew={reset}
+              />
+            </Container>
+          </Section>
+        )}
+
+        {isLanding && (
+          <>
+            <Section id="how-it-works">
+              <Container>
+                <h2 className="section-heading">How it works</h2>
+                <HowItWorks />
+              </Container>
+            </Section>
+
+            <Section id="about">
+              <Container>
+                <h2 className="section-heading">About</h2>
+                <p className="about-text">
+                  Vectuno is a focused image-to-vector converter — nothing more. There's no account to create and
+                  no file storage: your image is decoded and traced locally in your browser, and nothing leaves
+                  your device.
+                </p>
+              </Container>
+            </Section>
+          </>
         )}
       </main>
     </div>

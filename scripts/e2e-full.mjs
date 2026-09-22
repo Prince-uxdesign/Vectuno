@@ -36,7 +36,7 @@ async function testFullWorkflow(fileName) {
   ok("reaches ready state", true);
   ok("shows file preview image", await page.locator(".file-preview__image").isVisible());
   ok("shows file metadata (name)", (await page.locator(".file-metadata").textContent())?.includes(fileName));
-  const convertBtn = page.locator(".conversion-status .app-primary");
+  const convertBtn = page.locator(".conversion-status .btn-primary");
   ok("convert button enabled when ready", await convertBtn.isEnabled());
 
   await convertBtn.click();
@@ -60,7 +60,7 @@ async function testFullWorkflow(fileName) {
   ok("shows SVG stats", ((await page.locator(".result-preview__stats").textContent())?.length ?? 0) > 0);
 
   const downloadPromise = page.waitForEvent("download", { timeout: 5000 });
-  await page.locator(".workspace__actions .app-primary").click();
+  await page.locator(".workspace__actions .btn-primary").click();
   const download = await downloadPromise;
   const expectedBase = fileName.replace(/\.[^.]+$/, "");
   ok(
@@ -89,10 +89,10 @@ async function testBreakpoint(width) {
   ok(`${width}px: no horizontal scroll (workspace)`, !hScroll2);
 
   // touch target size check on the primary convert button
-  const box = await page.locator(".conversion-status .app-primary").boundingBox();
+  const box = await page.locator(".conversion-status .btn-primary").boundingBox();
   ok(`${width}px: convert button >= 44px tall`, (box?.height ?? 0) >= 44);
 
-  await page.locator(".conversion-status .app-primary").click();
+  await page.locator(".conversion-status .btn-primary").click();
   await page.waitForSelector(".result-preview, .error-state", { timeout: 30000 });
   const hScroll3 = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
@@ -108,10 +108,22 @@ async function testKeyboardNav() {
   const page = await browser.newPage();
   await page.goto(BASE, { waitUntil: "networkidle" });
 
-  await page.keyboard.press("Tab"); // nav link
-  await page.keyboard.press("Tab"); // upload zone
-  const focused = await page.evaluate(() => document.activeElement?.className);
-  ok("Tab reaches upload zone", focused?.includes("upload-zone") ?? false, focused);
+  // Tab order should be logical: logo -> nav links -> CTA -> upload zone.
+  // Walk forward (bounded) instead of assuming a fixed count, and log the
+  // sequence so a broken/illogical order is visible, not just "found it".
+  const sequence = [];
+  let reachedUploadZone = false;
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("Tab");
+    const cls = await page.evaluate(() => document.activeElement?.className ?? "");
+    sequence.push(cls);
+    if (cls.includes("upload-zone") && !cls.includes("upload-zone__")) {
+      reachedUploadZone = true;
+      break;
+    }
+  }
+  console.log("  tab sequence:", sequence.join(" -> "));
+  ok("Tab order reaches upload zone in a bounded, logical sequence", reachedUploadZone);
 
   // Enter should open the native picker; we can't drive the OS dialog, but
   // we can confirm the click-through fires by listening for the 'filechooser' event.
@@ -147,7 +159,7 @@ async function testTouch() {
   ok("tap on upload zone opens file chooser", !!chooser);
   await chooser.setFiles(path.join(FIXTURES, "03-icon.png"));
   await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .app-primary").tap();
+  await page.locator(".conversion-status .btn-primary").tap();
   await page.waitForSelector(".result-preview", { timeout: 30000 });
   ok("tap-driven conversion reaches result", await page.locator(".result-preview").isVisible());
   await page.close();
@@ -167,10 +179,10 @@ async function testRejection() {
   await page.locator(".error-state").waitFor({ timeout: 10000 });
   const msg = await page.locator(".error-state__message").textContent();
   ok("unsupported file shows error", !!msg, msg ?? "");
-  ok("unsupported file offers 'choose different image'", await page.locator(".error-state__actions .app-secondary").isVisible());
-  ok("unsupported file does NOT offer 'try again' (file is the problem)", (await page.locator(".error-state__actions .app-primary").count()) === 0);
+  ok("unsupported file offers 'choose different image'", await page.locator(".error-state__actions .btn-secondary").isVisible());
+  ok("unsupported file does NOT offer 'try again' (file is the problem)", (await page.locator(".error-state__actions .btn-primary").count()) === 0);
 
-  await page.locator(".error-state__actions .app-secondary").click();
+  await page.locator(".error-state__actions .btn-secondary").click();
   ok("choosing new file returns to empty/upload state", await page.locator(".upload-zone").isVisible());
   await page.close();
 }
@@ -213,11 +225,11 @@ async function testConversionFailure() {
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .app-primary").click();
+  await page.locator(".conversion-status .btn-primary").click();
   await page.locator(".error-state").waitFor({ timeout: 10000 });
   const msg = await page.locator(".error-state__message").textContent();
   ok("forced engine failure shows error", !!msg, msg ?? "");
-  ok("forced engine failure offers 'Try again' (retry-able)", await page.locator(".error-state__actions .app-primary").isVisible());
+  ok("forced engine failure offers 'Try again' (retry-able)", await page.locator(".error-state__actions .btn-primary").isVisible());
   ok("file preview/settings still visible during retryable error", await page.locator(".file-preview").isVisible());
   await page.close();
 }
@@ -232,7 +244,7 @@ async function testReplaceImage() {
   const nameBefore = await page.locator(".file-metadata").textContent();
   ok("shows first file name", nameBefore?.includes("01-bw-logo.png") ?? false);
 
-  await page.locator(".file-preview .app-secondary").click(); // "Change image"
+  await page.locator(".file-preview .btn-secondary").click(); // "Change image"
   ok("change image returns to upload zone", await page.locator(".upload-zone").isVisible());
 
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
@@ -251,10 +263,10 @@ async function testSequentialConversions() {
   for (const file of files) {
     await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, file));
     await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-    await page.locator(".conversion-status .app-primary").click();
+    await page.locator(".conversion-status .btn-primary").click();
     await page.waitForSelector(".result-preview", { timeout: 30000 });
     ok(`sequential: ${file} converted`, await page.locator(".result-preview").isVisible());
-    await page.locator(".workspace__actions .app-secondary").click(); // "Convert another image"
+    await page.locator(".workspace__actions .btn-secondary").click(); // "Convert another image"
     ok(`sequential: returns to empty state after ${file}`, await page.locator(".upload-zone").isVisible());
   }
   await page.close();
