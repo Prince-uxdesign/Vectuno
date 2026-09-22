@@ -22,13 +22,17 @@ function isDataTransferAcceptable(dataTransfer: DataTransfer): boolean {
   return knownTypes.every((type) => ACCEPTED_MIME_TYPES.includes(type as (typeof ACCEPTED_MIME_TYPES)[number]));
 }
 
-export const UploadZone = forwardRef<HTMLDivElement, UploadZoneProps>(function UploadZone(
+// The whole zone is mouse/drag operable, but the single keyboard + screen
+// reader control is a real <button> (one tab stop). The hidden file input
+// stays out of the tab order so keyboard users don't hit two controls for
+// the same action. Drag-and-drop only enhances the button.
+export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(function UploadZone(
   { isDragActive, onFile, onDragStateChange },
   forwardedRef
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  useImperativeHandle(forwardedRef, () => rootRef.current as HTMLDivElement);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useImperativeHandle(forwardedRef, () => buttonRef.current as HTMLButtonElement);
   // Drag events fire on children too; a counter avoids flicker when the
   // pointer passes over text/icons inside the drop zone.
   const dragDepthRef = useRef(0);
@@ -42,6 +46,10 @@ export const UploadZone = forwardRef<HTMLDivElement, UploadZoneProps>(function U
     [onFile]
   );
 
+  const openPicker = useCallback(() => {
+    inputRef.current?.click();
+  }, []);
+
   const dropZoneClass = [
     "upload-zone",
     isDragActive && !isDragInvalid ? "upload-zone--active" : "",
@@ -52,9 +60,7 @@ export const UploadZone = forwardRef<HTMLDivElement, UploadZoneProps>(function U
 
   return (
     <div
-      ref={rootRef}
       className={dropZoneClass}
-      onClick={() => inputRef.current?.click()}
       onDragEnter={(e) => {
         e.preventDefault();
         dragDepthRef.current += 1;
@@ -77,15 +83,6 @@ export const UploadZone = forwardRef<HTMLDivElement, UploadZoneProps>(function U
         setIsDragInvalid(false);
         handleFiles(e.dataTransfer.files);
       }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          inputRef.current?.click();
-        }
-      }}
-      aria-label="Upload an image to convert. Accepts PNG, JPG, JPEG, or WebP."
     >
       <input
         ref={inputRef}
@@ -101,22 +98,30 @@ export const UploadZone = forwardRef<HTMLDivElement, UploadZoneProps>(function U
         }}
       />
 
-      <span className="upload-zone__icon" aria-hidden="true">
-        {isDragInvalid ? <InvalidIcon /> : <UploadIcon />}
-      </span>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="upload-zone__button"
+        onClick={openPicker}
+        aria-label="Upload an image to convert. Accepts PNG, JPG, JPEG, or WebP."
+      >
+        <span className="upload-zone__icon" aria-hidden="true">
+          {isDragInvalid ? <InvalidIcon /> : <UploadIcon />}
+        </span>
 
-      {isDragInvalid ? (
-        <span className="upload-zone__label">That file type isn't supported</span>
-      ) : (
-        <>
-          <span className="upload-zone__label">{isDragActive ? "Release to upload" : "Drop your image here"}</span>
-          <span className="upload-zone__sub">
-            or <span className="upload-zone__browse">browse files</span>
-          </span>
-        </>
-      )}
+        {isDragInvalid ? (
+          <span className="upload-zone__label">That file type isn't supported</span>
+        ) : (
+          <>
+            <span className="upload-zone__label">{isDragActive ? "Release to upload" : "Drop your image here"}</span>
+            <span className="upload-zone__sub">
+              or <span className="upload-zone__browse">browse files</span>
+            </span>
+          </>
+        )}
 
-      <FileTypeHint className="upload-zone__hint" />
+        <FileTypeHint className="upload-zone__hint" />
+      </button>
     </div>
   );
 });

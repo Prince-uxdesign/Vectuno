@@ -13,7 +13,9 @@
     "test:settings": "node scripts/benchmark-settings.mjs",
     "test:e2e": "node scripts/e2e-full.mjs",
     "test:visual": "node scripts/visual-probe.mjs",
-    "test:design": "node scripts/design-screenshots.mjs"
+    "test:design": "node scripts/design-screenshots.mjs",
+    "test:responsive": "node scripts/responsive-audit.mjs",
+    "test:responsive-shots": "node scripts/responsive-shots.mjs"
   },
   "dependencies": {
     "imagetracerjs": "^1.2.6",

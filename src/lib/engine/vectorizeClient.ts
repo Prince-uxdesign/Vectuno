@@ -1,5 +1,6 @@
 import { AppError, ConversionCancelled, type ConversionOptions, type ConversionResult, type DecodedImage } from "../../types";
 import { buildImageTracerOptions } from "./presets";
+import { optimizeSvg } from "./optimizeSvg";
 import type { VectorizeFailure, VectorizeRequest, VectorizeSuccess } from "./vectorize.worker";
 
 const WORKER_TIMEOUT_MS = 30_000;
@@ -51,7 +52,7 @@ export function vectorize(
       cleanup();
       const msg = event.data;
       if (msg.ok) {
-        const svg = msg.svg;
+        const svg = optimizeSvg(msg.svg);
         resolve({
           svg,
           sizeBytes: new Blob([svg]).size,

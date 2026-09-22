@@ -5,21 +5,26 @@ import { Button } from "./ui/Button";
 interface DownloadButtonProps {
   svg: string;
   sourceFilename: string;
+  onError?: () => void;
 }
 
-export function DownloadButton({ svg, sourceFilename }: DownloadButtonProps) {
+export function DownloadButton({ svg, sourceFilename, onError }: DownloadButtonProps) {
   const handleDownload = useCallback(() => {
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = deriveSvgFilename(sourceFilename);
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [svg, sourceFilename]);
+    try {
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = deriveSvgFilename(sourceFilename);
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      onError?.();
+    }
+  }, [svg, sourceFilename, onError]);
 
   return (
-    <Button variant="primary" onClick={handleDownload}>
+    <Button variant="primary" className="result-screen__download" onClick={handleDownload}>
       Download SVG
     </Button>
   );

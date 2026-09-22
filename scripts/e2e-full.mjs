@@ -41,7 +41,7 @@ async function testFullWorkflow(fileName) {
 
   await convertBtn.click();
   await page.waitForFunction(
-    () => document.querySelector(".result-preview") !== null || document.querySelector(".error-state") !== null,
+    () => document.querySelector(".result-screen") !== null || document.querySelector(".error-state") !== null,
     { timeout: 30000 }
   );
 
@@ -53,14 +53,21 @@ async function testFullWorkflow(fileName) {
     return;
   }
 
-  ok("shows result preview after conversion", await page.locator(".result-preview").isVisible());
-  ok("SVG image renders (has natural size)", await page
-    .locator(".result-preview__pane:nth-child(2) img")
-    .evaluate((img) => img.naturalWidth > 0));
-  ok("shows SVG stats", ((await page.locator(".result-preview__stats").textContent())?.length ?? 0) > 0);
+  ok("shows result screen heading", (await page.locator(".result-screen__heading").textContent())?.includes("ready") ?? false);
+  ok("shows result screen after conversion", await page.locator(".result-screen").isVisible());
+  ok(
+    "SVG renders inline (real <svg> element, not a raster image)",
+    await page.locator(".compare-slider__layer--vector svg").count() > 0
+  );
+  ok(
+    "inline SVG has actual path content",
+    await page.locator(".compare-slider__layer--vector svg path").count() > 0
+  );
+  ok("shows SVG metadata", ((await page.locator(".result-metadata").textContent())?.length ?? 0) > 0);
+  ok("metadata includes dimensions", (await page.locator(".result-metadata").textContent())?.includes("×") ?? false);
 
   const downloadPromise = page.waitForEvent("download", { timeout: 5000 });
-  await page.locator(".workspace__actions .btn-primary").click();
+  await page.locator(".result-screen__actions .btn-primary").click();
   const download = await downloadPromise;
   const expectedBase = fileName.replace(/\.[^.]+$/, "");
   ok(
@@ -93,11 +100,19 @@ async function testBreakpoint(width) {
   ok(`${width}px: convert button >= 44px tall`, (box?.height ?? 0) >= 44);
 
   await page.locator(".conversion-status .btn-primary").click();
-  await page.waitForSelector(".result-preview, .error-state", { timeout: 30000 });
+  await page.waitForSelector(".result-screen, .error-state", { timeout: 30000 });
   const hScroll3 = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
   );
   ok(`${width}px: no horizontal scroll (result)`, !hScroll3);
+
+  // The comparison handle is the smallest interactive control on the result
+  // screen — confirm it still meets the touch target minimum at every width.
+  const handleBox = await page.locator(".compare-slider__handle").boundingBox();
+  ok(`${width}px: comparison handle >= 44px touch target`, (handleBox?.width ?? 0) >= 44 && (handleBox?.height ?? 0) >= 44);
+
+  const downloadBox = await page.locator(".result-screen__download").boundingBox();
+  ok(`${width}px: download button >= 44px tall`, (downloadBox?.height ?? 0) >= 44);
 
   await page.close();
 }
@@ -160,8 +175,15 @@ async function testTouch() {
   await chooser.setFiles(path.join(FIXTURES, "03-icon.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.locator(".conversion-status .btn-primary").tap();
-  await page.waitForSelector(".result-preview", { timeout: 30000 });
-  ok("tap-driven conversion reaches result", await page.locator(".result-preview").isVisible());
+  await page.waitForSelector(".result-screen", { timeout: 30000 });
+  ok("tap-driven conversion reaches result", await page.locator(".result-screen").isVisible());
+
+  // Touch-driven comparison: tapping the Original/Vector toggle should move
+  // the divider without needing a drag gesture.
+  await page.getByRole("group", { name: "Switch between original and vector" }).getByRole("button", { name: "Vector" }).tap();
+  const valueAfterTap = await page.locator(".compare-slider__handle").getAttribute("aria-valuenow");
+  ok("touch: toggle button moves comparison to Vector (0)", valueAfterTap === "0");
+
   await page.close();
   await context.close();
 }
@@ -268,9 +290,15 @@ async function testSequentialConversions() {
     await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, file));
     await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
     await page.locator(".conversion-status .btn-primary").click();
-    await page.waitForSelector(".result-preview", { timeout: 30000 });
-    ok(`sequential: ${file} converted`, await page.locator(".result-preview").isVisible());
-    await page.locator(".workspace__actions .btn-secondary").click(); // "Convert another image"
+    await page.waitForSelector(".result-screen", { timeout: 30000 });
+    ok(`sequential: ${file} converted`, await page.locator(".result-screen").isVisible());
+    if (file === "05-transparent.png") {
+      ok(
+        "sequential: transparent PNG shows checkerboard background",
+        await page.locator(".compare-slider__frame--checkerboard").isVisible()
+      );
+    }
+    await page.locator(".result-screen__actions .btn-secondary").click(); // "Convert another image"
     ok(`sequential: returns to empty state after ${file}`, await page.locator(".upload-zone").isVisible());
   }
   await page.close();
@@ -291,8 +319,8 @@ async function testSettingsChangeOutput() {
       .getByRole("button", { name: smoothness, exact: true })
       .click();
     await page.locator(".conversion-status__cta").click();
-    await page.waitForSelector(".result-preview", { timeout: 30000 });
-    const stats = await page.locator(".result-preview__stats").textContent();
+    await page.waitForSelector(".result-screen", { timeout: 30000 });
+    const stats = await page.locator(".result-metadata").textContent();
     await page.close();
     const paths = Number(/Paths(\d+)/.exec(stats ?? "")?.[1] ?? -1);
     return { stats, paths };
@@ -372,8 +400,8 @@ async function testCancellation() {
   // Converting again afterward should work normally — cancellation must not
   // leave the pipeline in a broken state.
   await page.locator(".conversion-status__cta").click();
-  await page.waitForSelector(".result-preview", { timeout: 30000 });
-  ok("conversion works normally after a prior cancel", await page.locator(".result-preview").isVisible());
+  await page.waitForSelector(".result-screen", { timeout: 30000 });
+  ok("conversion works normally after a prior cancel", await page.locator(".result-screen").isVisible());
   await page.close();
 }
 
@@ -393,6 +421,47 @@ async function testNoAutoConvert() {
     "changing settings does not start a conversion",
     (await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).count()) > 0
   );
+  await page.close();
+}
+
+// ---------- 13. Compare slider accessibility ----------
+async function testCompareSliderA11y() {
+  console.log("\n[compare slider accessibility]");
+  const page = await browser.newPage();
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status .btn-primary").click();
+  await page.waitForSelector(".result-screen", { timeout: 30000 });
+
+  const handle = page.locator(".compare-slider__handle");
+  ok("handle exposes role=slider", (await handle.getAttribute("role")) === "slider");
+  ok("handle has an accessible label", !!(await handle.getAttribute("aria-labelledby")));
+  ok("handle starts at 50 (even split)", (await handle.getAttribute("aria-valuenow")) === "50");
+
+  await handle.focus();
+  await page.keyboard.press("ArrowLeft");
+  const afterLeft = await handle.getAttribute("aria-valuenow");
+  ok("ArrowLeft decreases the value", Number(afterLeft) < 50);
+
+  await page.keyboard.press("End");
+  ok("End jumps to 100", (await handle.getAttribute("aria-valuenow")) === "100");
+  await page.keyboard.press("Home");
+  ok("Home jumps to 0", (await handle.getAttribute("aria-valuenow")) === "0");
+
+  // Non-drag alternative: the Original/Split/Vector buttons must reach every
+  // state the handle can, since dragging can't be the only way in.
+  const toggle = page.getByRole("group", { name: "Switch between original and vector" });
+  await toggle.getByRole("button", { name: "Original" }).click();
+  ok("toggle 'Original' sets value to 100", (await handle.getAttribute("aria-valuenow")) === "100");
+  await toggle.getByRole("button", { name: "Split" }).click();
+  ok("toggle 'Split' resets value to 50", (await handle.getAttribute("aria-valuenow")) === "50");
+
+  ok(
+    "screen-reader description of the comparison exists",
+    (await page.locator(".compare-slider .visually-hidden").count()) > 0
+  );
+
   await page.close();
 }
 
@@ -420,6 +489,7 @@ await testSettingsChangeOutput();
 await testAdvancedDisclosure();
 await testCancellation();
 await testNoAutoConvert();
+await testCompareSliderA11y();
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
