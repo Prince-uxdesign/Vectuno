@@ -4,7 +4,7 @@
   --white: #ffffff;
   --gray-100: #f5f5f4; /* very light gray — surfaces */
   --gray-300: #e2e0dd; /* light gray — borders, dividers */
-  --gray-500: #8a8681; /* medium gray — secondary text */
+  --gray-500: #615c57; /* medium gray — secondary text (darkened to 4.6:1 on white) */
   --gray-700: #4a4744; /* dark gray — headings on light surfaces, hover states */
   --error: #b00020;
 
@@ -44,6 +44,15 @@
   :root {
     --duration-fast: 0ms;
     --duration-base: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -227,19 +236,34 @@ button {
 .upload-zone {
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-lg);
-  padding: clamp(var(--space-7), 10vw, var(--space-9)) var(--space-5);
+  padding: 0;
+  background: var(--bg);
+  transition: background-color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+}
+
+/* The real <button> fills the whole zone so every pixel that used to be
+   clickable still is — one tab stop, semantic control, no div-as-button. */
+.upload-zone__button {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  cursor: pointer;
-  background: var(--bg);
-  transition: background-color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+  width: 100%;
   min-height: 220px;
+  padding: clamp(var(--space-7), 10vw, var(--space-9)) var(--space-5);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: inherit;
+  text-align: center;
 }
 
 .upload-zone:hover {
+  background: var(--surface);
+}
+
+.upload-zone__button:hover {
   background: var(--surface);
 }
 
@@ -556,7 +580,8 @@ button {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 32px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
 }
 
 .advanced-disclosure summary::-webkit-details-marker {
@@ -661,80 +686,242 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .spinner {
-    animation-duration: 2s;
+    /* No rotation — the adjacent "Vectorizing your image" text still
+       communicates that work is happening, so no feedback is lost. */
+    animation: none;
   }
 }
 
-/* ---------- ResultPreview ---------- */
+/* ---------- ResultPreview / result screen ---------- */
 
-.result-preview {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-@media (min-width: 768px) {
-  .result-preview {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.result-preview__pane {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
+.result-screen {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-6);
 }
 
-.result-preview__pane-label {
-  font-size: 0.8rem;
+.result-screen__intro {
+  text-align: center;
+}
+
+.result-screen__heading {
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-2);
+}
+
+.result-screen__subheading {
+  color: var(--muted);
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* Mobile-first stacked order: comparison, then metadata + actions — matches
+   the conceptual order in the brief (heading -> comparison -> metadata ->
+   download -> convert another), all above the fold as far as viewport allows. */
+.result-screen__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.result-screen__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.result-screen__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-screen__download {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1rem;
+}
+
+/* Desktop: give the comparison room to breathe and put metadata + actions in
+   a dedicated sidebar rather than forcing a two-column squeeze at tablet
+   widths. */
+@media (min-width: 1024px) {
+  .result-screen__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    align-items: start;
+    gap: var(--space-7);
+  }
+
+  /* Actions stay stacked (not side-by-side) even at desktop widths — the
+     sidebar column (260-320px) isn't wide enough for two buttons in a row
+     without their labels wrapping to two lines. */
+}
+
+.result-screen__preview-error {
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.result-screen__preview-error-message {
+  margin: 0;
+  color: var(--error);
+  font-weight: 600;
+}
+
+.result-screen__preview-error-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ---------- CompareSlider ---------- */
+
+.compare-slider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Capping max-height alone (while width:100%) breaks the aspect-ratio math —
+   the box would stay full container width but get clamped shorter, so the
+   image inside (object-fit: contain) letterboxes off-center instead of the
+   whole frame shrinking proportionally. Capping max-width too, computed from
+   max-height via the frame's own aspect-ratio (set inline per-image in
+   CompareSlider), keeps both dimensions in proportion and lets margin:auto
+   center the result — see --compare-max-h below for how short viewports
+   override the height budget. */
+.compare-slider__frame {
+  position: relative;
+  width: 100%;
+  max-height: var(--compare-max-h, min(70vh, 640px));
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.compare-slider__frame--checkerboard {
+  background-image: linear-gradient(45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+.compare-slider__layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compare-slider__layer--vector svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.compare-slider__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.compare-slider__tag {
+  position: absolute;
+  top: var(--space-3);
+  background: rgba(10, 10, 10, 0.72);
+  color: var(--white);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.compare-slider__tag--left {
+  left: var(--space-3);
+}
+
+.compare-slider__tag--right {
+  right: var(--space-3);
+}
+
+.compare-slider__divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--white);
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.5);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+
+/* 44px touch target per WCAG target-size guidance, centered on the divider
+   line so dragging never needs to be pixel-precise. */
+.compare-slider__handle {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--fg);
+  border: 1.5px solid var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+}
+
+.compare-slider__toggle {
+  align-self: center;
+  max-width: 320px;
+  width: 100%;
+}
+
+/* ---------- ResultMetadata ---------- */
+
+.result-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px 24px;
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.result-metadata__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.result-metadata__row dt {
+  font-size: 0.75rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.result-preview__frame {
-  min-height: 180px;
-  max-height: 320px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.result-preview__image {
-  max-width: 100%;
-  max-height: 296px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-}
-
-.result-preview__stats {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  flex-wrap: wrap;
+.result-metadata__row dd {
   margin: 0;
-}
-
-.result-preview__stats > div {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-}
-
-.result-preview__stats dt {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.result-preview__stats dd {
-  margin: 0;
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 500;
 }
 
@@ -774,12 +961,6 @@ button {
 
 /* ---------- Shared actions / notices ---------- */
 
-.workspace__actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 /* ---------- Button (Default / Hover / Focus / Active / Disabled) ---------- */
 
 .btn {
@@ -795,7 +976,6 @@ button {
 
 /* Buttons only grow to fill space when they're siblings in an action row —
    growing is a layout decision for the parent, not an intrinsic button trait. */
-.workspace__actions .btn,
 .error-state__actions .btn {
   flex: 1;
   min-width: 140px;
@@ -879,7 +1059,67 @@ button {
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid var(--fg);
+summary:focus-visible,
+[role="slider"]:focus-visible {
+  outline: 3px solid var(--fg);
   outline-offset: 2px;
+}
+
+/* The segmented container clips overflow for its rounded corners, which
+   would slice an outward focus ring on the edge buttons. Draw the ring
+   inside instead — equally visible, never clipped. */
+.segmented button:focus-visible {
+  outline-offset: -3px;
+}
+
+/* The compare handle sits on top of arbitrary image content, so a lone
+   black ring can vanish against dark pixels. A white outer ring behind the
+   black one keeps it visible on light and dark images alike — shape, not
+   color, carries the signal. */
+.compare-slider__handle:focus-visible {
+  outline: 3px solid var(--fg);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--white);
+}
+
+/* ---------- Short viewports (landscape phones, ~380-500px tall) ---------- */
+
+/* Otherwise the header + heading alone consume most of the visible height
+   before any actual content appears. Compress vertical rhythm so the
+   comparison/workspace content is reachable without excessive scrolling.
+   Height-only query — applies regardless of width or orientation. Placed
+   last so it wins the cascade over the unconditional rules above it. */
+@media (max-height: 500px) {
+  .site-header__inner {
+    padding-block: var(--space-2);
+  }
+
+  .section--compact {
+    padding-block: var(--space-4);
+  }
+
+  .result-screen {
+    gap: var(--space-4);
+  }
+
+  .result-screen__heading {
+    font-size: 1.375rem;
+    margin-bottom: 4px;
+  }
+
+  .result-screen__subheading {
+    font-size: 0.85rem;
+  }
+
+  :root {
+    --compare-max-h: 50vh;
+  }
+
+  .hero {
+    padding-top: var(--space-4);
+  }
+
+  .hero__intro {
+    margin-bottom: var(--space-4);
+  }
 }

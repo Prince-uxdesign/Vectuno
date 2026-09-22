@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Navigation } from "./components/Navigation";
 import { UploadZone } from "./components/UploadZone";
 import { HowItWorks } from "./components/HowItWorks";
@@ -7,16 +7,16 @@ import { FileMetadata } from "./components/FileMetadata";
 import { ConversionSettings } from "./components/ConversionSettings";
 import { ConversionStatus } from "./components/ConversionStatus";
 import { ResultPreview } from "./components/ResultPreview";
-import { DownloadButton } from "./components/DownloadButton";
 import { ErrorState } from "./components/ErrorState";
-import { Button } from "./components/ui/Button";
 import { Container } from "./components/ui/Container";
 import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
 
 function App() {
   const { state, loadFile, setOptions, convert, cancel, reset, setDragActive } = useConverter();
-  const uploadZoneRef = useRef<HTMLDivElement>(null);
+  const uploadZoneRef = useRef<HTMLButtonElement>(null);
+  const workspaceHeadingRef = useRef<HTMLHeadingElement>(null);
+  const prevStageRef = useRef(state.stage);
 
   const isLanding = state.stage === "empty" || state.stage === "dragActive";
   // A conversion (not upload) failure keeps the file context on screen —
@@ -33,13 +33,30 @@ function App() {
   const showResult = state.stage === "success";
   const showError = state.stage === "error";
 
+  // Focus management for screen transitions. Each transition unmounts the
+  // control the user was on, which would drop focus to <body>:
+  // - workspace appears (upload button gone) -> park on the workspace heading
+  // - back to landing (workspace/result gone) -> return to the upload button
+  // Success and error screens focus themselves (see ResultPreview/ErrorState).
+  useEffect(() => {
+    const prev = prevStageRef.current;
+    prevStageRef.current = state.stage;
+    const wasLanding = prev === "empty" || prev === "dragActive";
+    if (!wasLanding && isLanding) {
+      requestAnimationFrame(() => uploadZoneRef.current?.focus());
+    } else if (wasLanding && showWorkspace) {
+      requestAnimationFrame(() => workspaceHeadingRef.current?.focus());
+    }
+  }, [state.stage, isLanding, showWorkspace]);
+
   const scrollToUpload = useCallback(() => {
     if (!isLanding) {
       reset();
     }
     // Wait a frame so the upload zone is back in the DOM after a reset.
     requestAnimationFrame(() => {
-      uploadZoneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      uploadZoneRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
       uploadZoneRef.current?.focus();
     });
   }, [isLanding, reset]);
@@ -128,19 +145,16 @@ function App() {
           </Section>
         )}
 
-        {showResult && state.result && state.previewUrl && state.file && (
+        {showResult && state.result && state.previewUrl && state.file && state.decoded && (
           <Section compact>
             <Container wide>
-              <div className="workspace">
-                <ResultPreview sourcePreviewUrl={state.previewUrl} result={state.result} />
-
-                <div className="workspace__actions">
-                  <Button variant="secondary" onClick={reset}>
-                    Convert another image
-                  </Button>
-                  <DownloadButton svg={state.result.svg} sourceFilename={state.file.name} />
-                </div>
-              </div>
+              <ResultPreview
+                sourcePreviewUrl={state.previewUrl}
+                sourceFilename={state.file.name}
+                result={state.result}
+                decoded={state.decoded}
+                onConvertAnother={reset}
+              />
             </Container>
           </Section>
         )}

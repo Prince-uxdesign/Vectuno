@@ -96,7 +96,7 @@ for (const width of [320, 768, 1440]) {
   await page.screenshot({ path: path.join(OUT, `ready-${width}.png`), fullPage: true });
 
   await page.locator(".conversion-status .btn-primary").click();
-  await page.waitForSelector(".result-preview", { timeout: 30000 });
+  await page.waitForSelector(".result-screen", { timeout: 30000 });
   await page.screenshot({ path: path.join(OUT, `result-${width}.png`), fullPage: true });
   await page.close();
 }
