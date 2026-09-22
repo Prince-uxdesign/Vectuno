@@ -10,7 +10,7 @@ export function Logo({ className = "" }: LogoProps) {
           <path
             d="M3 12 L9 4 L21 4 L15 12 L21 20 L9 20 Z"
             stroke="currentColor"
-            strokeWidth="1.6"
+            strokeWidth="1.75"
             strokeLinejoin="round"
             fill="none"
           />

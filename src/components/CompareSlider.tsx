@@ -129,7 +129,7 @@ export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width,
           onKeyDown={handleKeyDown}
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
-            <path d="M8 6l-5 6 5 6M16 6l5 6-5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M8 6l-5 6 5 6M16 6l5 6-5 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       </div>

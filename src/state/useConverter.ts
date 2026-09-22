@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { decodeImage } from "../lib/image/decode";
 import { validateFile } from "../lib/image/validate";
 import { vectorize } from "../lib/engine/vectorizeClient";
@@ -85,8 +85,17 @@ export function useConverter() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const previewUrlRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Bumped on every reset() and loadFile() call so a slow-resolving
+  // validate/decode from a superseded call can't dispatch onto state that
+  // has since moved on (e.g. two files dropped in quick succession, or
+  // "Change image" clicked while a decode is still in flight) — without
+  // this, the later call's PREPARING/READY could be clobbered by the
+  // earlier one resolving after it, leaving `file`/`decoded`/`previewUrl`
+  // mismatched.
+  const loadTokenRef = useRef(0);
 
   const reset = useCallback(() => {
+    loadTokenRef.current += 1;
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     previewUrlRef.current = null;
     abortControllerRef.current?.abort();
@@ -98,6 +107,7 @@ export function useConverter() {
   }, []);
 
   const loadFile = useCallback(async (file: File) => {
+    const token = ++loadTokenRef.current;
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     previewUrlRef.current = null;
     dispatch({ type: "FILE_SELECTED" });
@@ -105,12 +115,19 @@ export function useConverter() {
     try {
       validateFile(file);
       const previewUrl = URL.createObjectURL(file);
+      if (token !== loadTokenRef.current) {
+        // Superseded while validating/creating the URL — don't leak it.
+        URL.revokeObjectURL(previewUrl);
+        return;
+      }
       previewUrlRef.current = previewUrl;
       dispatch({ type: "PREPARING", file, previewUrl });
 
       const decoded = await decodeImage(file);
+      if (token !== loadTokenRef.current) return;
       dispatch({ type: "READY", decoded });
     } catch (err) {
+      if (token !== loadTokenRef.current) return;
       const appError =
         err instanceof AppError
           ? err
@@ -152,6 +169,14 @@ export function useConverter() {
 
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      loadTokenRef.current += 1;
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      abortControllerRef.current?.abort();
+    };
   }, []);
 
   return { state, loadFile, setOptions, convert, cancel, reset, setDragActive };

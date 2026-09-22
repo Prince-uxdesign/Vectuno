@@ -31,6 +31,20 @@
   --radius-md: 8px;
   --radius-lg: 12px;
 
+  /* ---- Type scale: consolidated from what was previously ~11 near-duplicate
+     sizes (0.7/0.75/0.8/0.85/0.875/0.9/0.95/1/1.05rem used near-interchangeably
+     for the same roles) down to a deliberate 6-step scale, plus the three
+     fluid heading sizes kept as their own tokens. ---- */
+  --text-2xs: 0.75rem; /* metadata labels, eyebrow/uppercase micro-text */
+  --text-xs: 0.85rem; /* hints, supporting copy, secondary status text */
+  --text-sm: 0.9rem; /* nav links, secondary body copy */
+  --text-base: 0.95rem; /* buttons, primary status text, body emphasis */
+  --text-md: 1rem; /* running body copy (About) */
+  --text-lg: 1.05rem; /* logo, card/step titles */
+  --text-section-heading: clamp(1.25rem, 2.5vw, 1.5rem);
+  --text-page-heading: clamp(1.5rem, 4vw, 2.25rem);
+  --text-display: clamp(1.75rem, 5vw, 3rem);
+
   /* ---- Motion ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 120ms;
@@ -124,7 +138,7 @@ button {
 }
 
 .section-heading {
-  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-size: var(--text-section-heading);
   letter-spacing: -0.01em;
   margin: 0 0 var(--space-5);
   text-align: center;
@@ -146,7 +160,7 @@ button {
 
 .logo__word {
   font-weight: 600;
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
   letter-spacing: -0.02em;
 }
 
@@ -188,7 +202,7 @@ button {
 .site-nav__link {
   color: var(--fg);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   padding: var(--space-3) 0;
   border-bottom: 1px solid transparent;
   transition: border-color var(--duration-fast) var(--ease);
@@ -217,7 +231,7 @@ button {
 }
 
 .hero__heading {
-  font-size: clamp(1.75rem, 5vw, 3rem);
+  font-size: var(--text-display);
   line-height: 1.1;
   letter-spacing: -0.03em;
   margin: 0 0 var(--space-4);
@@ -311,7 +325,7 @@ button {
 
 .upload-zone__sub {
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 .upload-zone__browse {
@@ -329,7 +343,7 @@ button {
 
 .file-type-hint {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-2xs);
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
@@ -363,13 +377,13 @@ button {
 .how-it-works__n {
   display: block;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-2xs);
   letter-spacing: 0.05em;
   margin-bottom: var(--space-2);
 }
 
 .how-it-works__title {
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
   margin: 0 0 var(--space-2);
   letter-spacing: -0.01em;
 }
@@ -377,7 +391,7 @@ button {
 .how-it-works__body {
   color: var(--muted);
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -388,14 +402,14 @@ button {
   max-width: 640px;
   margin: 0 auto;
   text-align: center;
-  font-size: 1rem;
+  font-size: var(--text-md);
   line-height: 1.7;
 }
 
 .workspace {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 /* Tablet/desktop: split the pre-conversion workspace into a media column and
@@ -407,7 +421,7 @@ button {
     display: grid;
     grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
     align-items: start;
-    gap: 32px;
+    gap: var(--space-6);
   }
 }
 
@@ -415,7 +429,7 @@ button {
 .workspace__panel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
   min-width: 0;
 }
 
@@ -425,7 +439,7 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .file-preview__frame {
@@ -436,8 +450,8 @@ button {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
   overflow: hidden;
   background: var(--surface);
 }
@@ -455,7 +469,7 @@ button {
 .file-metadata {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px 24px;
+  gap: var(--space-3) var(--space-5);
   margin: 0;
   width: 100%;
 }
@@ -468,7 +482,7 @@ button {
 }
 
 .file-metadata__row dt {
-  font-size: 0.75rem;
+  font-size: var(--text-2xs);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -476,7 +490,7 @@ button {
 
 .file-metadata__row dd {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -487,10 +501,10 @@ button {
 .conversion-settings {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: clamp(16px, 3vw, 24px);
+  border-radius: var(--radius-md);
+  padding: clamp(var(--space-4), 3vw, var(--space-5));
   margin: 0;
 }
 
@@ -500,7 +514,7 @@ button {
 
 .conversion-settings__title {
   padding: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   font-weight: 600;
 }
@@ -508,17 +522,17 @@ button {
 .conversion-settings__group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .conversion-settings__group-label {
-  font-size: 0.85rem;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 
 .conversion-settings__hint {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   line-height: 1.5;
 }
@@ -526,7 +540,7 @@ button {
 .segmented {
   display: flex;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -535,12 +549,12 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-2);
   background: var(--bg);
   color: var(--fg);
   border: none;
-  padding: 10px 12px;
-  font-size: 0.9rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
   min-height: 44px;
 }
 
@@ -574,7 +588,7 @@ button {
 
 .advanced-disclosure summary {
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   list-style: none;
   display: flex;
@@ -632,7 +646,7 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   text-align: center;
 }
 
@@ -648,19 +662,19 @@ button {
 .conversion-status__headline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 .conversion-status__subtext {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-xs);
 }
 
 .conversion-status__actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .conversion-status__cta {
@@ -705,7 +719,7 @@ button {
 }
 
 .result-screen__heading {
-  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  font-size: var(--text-page-heading);
   letter-spacing: -0.02em;
   margin: 0 0 var(--space-2);
 }
@@ -713,7 +727,7 @@ button {
 .result-screen__subheading {
   color: var(--muted);
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 /* Mobile-first stacked order: comparison, then metadata + actions — matches
@@ -734,13 +748,13 @@ button {
 .result-screen__actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .result-screen__download {
   width: 100%;
   min-height: 52px;
-  font-size: 1rem;
+  font-size: var(--text-md);
 }
 
 /* Desktop: give the comparison room to breathe and put metadata + actions in
@@ -778,7 +792,7 @@ button {
 .result-screen__preview-error-hint {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 /* ---------- CompareSlider ---------- */
@@ -899,7 +913,7 @@ button {
 .result-metadata {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px 24px;
+  gap: var(--space-4) var(--space-5);
   margin: 0;
   padding: var(--space-4) var(--space-5);
   border: 1px solid var(--border);
@@ -913,7 +927,7 @@ button {
 }
 
 .result-metadata__row dt {
-  font-size: 0.75rem;
+  font-size: var(--text-2xs);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -921,7 +935,7 @@ button {
 
 .result-metadata__row dd {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
@@ -931,29 +945,29 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
   text-align: center;
   border: 1px solid var(--error);
-  border-radius: 8px;
-  padding: clamp(20px, 4vw, 28px);
+  border-radius: var(--radius-md);
+  padding: clamp(var(--space-5), 4vw, var(--space-6));
 }
 
 .error-state__message {
   margin: 0;
   color: var(--error);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
 .error-state__hint {
   margin: calc(var(--space-1) * -1) 0 0;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-xs);
 }
 
 .error-state__actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
   justify-content: center;
   width: 100%;
@@ -967,7 +981,7 @@ button {
   min-height: 48px;
   padding-inline: var(--space-5);
   border-radius: var(--radius-sm);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 500;
   transition-property: background-color, color, border-color, transform;
   transition-duration: var(--duration-fast);
@@ -1038,19 +1052,19 @@ button {
   min-width: 0;
   min-height: 44px;
   padding-inline: var(--space-4);
-  font-size: 0.875rem;
+  font-size: var(--text-xs);
 }
 
 .app-notice {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-xs);
   margin: 0;
   text-align: center;
 }
 
 .app-error {
   color: var(--error);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   margin: 0;
 }
 
