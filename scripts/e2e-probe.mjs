@@ -26,7 +26,7 @@ async function testFile(fileName, { expectError } = {}) {
       await convertBtn.waitFor({ timeout: 10000 });
       await convertBtn.click();
       await page.waitForFunction(
-        () => document.querySelector(".app-primary") !== null || document.querySelector(".app-error") !== null,
+        () => document.querySelector(".btn-primary") !== null || document.querySelector(".app-error") !== null,
         { timeout: 30000 }
       );
       const hasError = await page.locator(".app-error").count();
@@ -38,7 +38,7 @@ async function testFile(fileName, { expectError } = {}) {
         console.log(`[${fileName}] OK -> stats: ${stats}`);
         // verify download triggers without throwing
         const downloadPromise = page.waitForEvent("download", { timeout: 5000 });
-        await page.locator(".app-primary").click();
+        await page.locator(".btn-primary").click();
         const download = await downloadPromise;
         console.log(`[${fileName}] download filename -> ${download.suggestedFilename()}`);
       }

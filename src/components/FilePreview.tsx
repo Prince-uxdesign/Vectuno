@@ -1,3 +1,5 @@
+import { Button } from "./ui/Button";
+
 interface FilePreviewProps {
   previewUrl: string;
   onChangeImage: () => void;
@@ -10,9 +12,9 @@ export function FilePreview({ previewUrl, onChangeImage, disabled }: FilePreview
       <div className="file-preview__frame">
         <img src={previewUrl} alt="Uploaded image preview" className="file-preview__image" />
       </div>
-      <button type="button" className="app-secondary" onClick={onChangeImage} disabled={disabled}>
+      <Button variant="secondary" onClick={onChangeImage} disabled={disabled}>
         Change image
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { Stage } from "../types";
+import { Button } from "./ui/Button";
 
 interface ConversionStatusProps {
   stage: Stage;
@@ -21,14 +22,9 @@ export function ConversionStatus({ stage, onConvert }: ConversionStatusProps) {
         {isBusy && <span className="spinner" aria-hidden="true" />}
         {text}
       </p>
-      <button
-        type="button"
-        className="app-primary"
-        onClick={onConvert}
-        disabled={stage !== "ready"}
-      >
+      <Button variant="primary" className="conversion-status__cta" onClick={onConvert} disabled={stage !== "ready"}>
         {stage === "converting" ? "Converting…" : "Convert to SVG"}
-      </button>
+      </Button>
     </div>
   );
 }

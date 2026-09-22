@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { deriveSvgFilename } from "../lib/utils/filename";
+import { Button } from "./ui/Button";
 
 interface DownloadButtonProps {
   svg: string;
@@ -18,8 +19,8 @@ export function DownloadButton({ svg, sourceFilename }: DownloadButtonProps) {
   }, [svg, sourceFilename]);
 
   return (
-    <button type="button" className="app-primary" onClick={handleDownload}>
+    <Button variant="primary" onClick={handleDownload}>
       Download SVG
-    </button>
+    </Button>
   );
 }

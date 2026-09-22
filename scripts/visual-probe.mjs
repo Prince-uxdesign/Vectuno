@@ -72,10 +72,10 @@ await testRealDrag(1440);
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .app-primary").click();
+  await page.locator(".conversion-status .btn-primary").click();
   await page.locator(".conversion-status__text", { hasText: /Converting/ }).waitFor({ timeout: 5000 });
 
-  const changeImageDisabled = await page.locator(".file-preview .app-secondary").isDisabled();
+  const changeImageDisabled = await page.locator(".file-preview .btn-secondary").isDisabled();
   console.log(`Change-image button disabled while converting: ${changeImageDisabled}`);
 
   const settingsDisabled = await page.locator(".conversion-settings").isDisabled();
@@ -95,7 +95,7 @@ for (const width of [320, 768, 1440]) {
   await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.screenshot({ path: path.join(OUT, `ready-${width}.png`), fullPage: true });
 
-  await page.locator(".conversion-status .app-primary").click();
+  await page.locator(".conversion-status .btn-primary").click();
   await page.waitForSelector(".result-preview", { timeout: 30000 });
   await page.screenshot({ path: path.join(OUT, `result-${width}.png`), fullPage: true });
   await page.close();
