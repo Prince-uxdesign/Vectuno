@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigation } from "./components/Navigation";
 import { UploadZone } from "./components/UploadZone";
 import { HowItWorks } from "./components/HowItWorks";
@@ -8,50 +8,82 @@ import { ConversionSettings } from "./components/ConversionSettings";
 import { ConversionStatus } from "./components/ConversionStatus";
 import { ResultPreview } from "./components/ResultPreview";
 import { ErrorState } from "./components/ErrorState";
+import { BatchWorkspace } from "./components/BatchWorkspace";
 import { Container } from "./components/ui/Container";
 import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
+import { useBatchConverter } from "./state/useBatchConverter";
 
 function App() {
   const { state, loadFile, setOptions, convert, cancel, reset, setDragActive } = useConverter();
+  const batch = useBatchConverter();
+  const [rejectedCount, setRejectedCount] = useState(0);
   const uploadZoneRef = useRef<HTMLButtonElement>(null);
   const workspaceHeadingRef = useRef<HTMLHeadingElement>(null);
-  const prevStageRef = useRef(state.stage);
 
-  const isLanding = state.stage === "empty" || state.stage === "dragActive";
+  const isBatchActive = batch.state.items.length > 0;
+  const isLanding = !isBatchActive && (state.stage === "empty" || state.stage === "dragActive");
   // A conversion (not upload) failure keeps the file context on screen —
   // the file is fine, only the last convert attempt failed — so the user
   // can retry without re-selecting anything. An upload/decode failure means
   // the file itself was rejected, so no file context exists to show.
   const isRetryableError = state.stage === "error" && state.errorRecovery === "retry";
   const showWorkspace =
-    state.stage === "fileSelected" ||
-    state.stage === "preparing" ||
-    state.stage === "ready" ||
-    state.stage === "converting" ||
-    isRetryableError;
-  const showResult = state.stage === "success";
-  const showError = state.stage === "error";
+    !isBatchActive &&
+    (state.stage === "fileSelected" ||
+      state.stage === "preparing" ||
+      state.stage === "ready" ||
+      state.stage === "converting" ||
+      isRetryableError);
+  const showResult = !isBatchActive && state.stage === "success";
+  const showError = !isBatchActive && state.stage === "error";
+
+  const handleUploadFiles = useCallback(
+    (files: File[]) => {
+      if (files.length > 1) {
+        const { rejected } = batch.addFiles(files);
+        setRejectedCount(rejected);
+      } else if (files.length === 1) {
+        loadFile(files[0]);
+      }
+    },
+    [batch, loadFile]
+  );
+
+  const handleAddToBatch = useCallback(
+    (files: File[]) => {
+      const { rejected } = batch.addFiles(files);
+      setRejectedCount(rejected);
+    },
+    [batch]
+  );
+
+  const handleBatchReset = useCallback(() => {
+    setRejectedCount(0);
+    batch.reset();
+  }, [batch]);
 
   // Focus management for screen transitions. Each transition unmounts the
   // control the user was on, which would drop focus to <body>:
   // - workspace appears (upload button gone) -> park on the workspace heading
-  // - back to landing (workspace/result gone) -> return to the upload button
-  // Success and error screens focus themselves (see ResultPreview/ErrorState).
+  // - back to landing (workspace/result/batch gone) -> return to the upload button
+  // Success, error, and batch screens focus themselves (see ResultPreview/
+  // ErrorState/BatchWorkspace), so this effect only tracks landing<->workspace.
+  const prevLandingRef = useRef(isLanding);
   useEffect(() => {
-    const prev = prevStageRef.current;
-    prevStageRef.current = state.stage;
-    const wasLanding = prev === "empty" || prev === "dragActive";
+    const wasLanding = prevLandingRef.current;
+    prevLandingRef.current = isLanding;
     if (!wasLanding && isLanding) {
       requestAnimationFrame(() => uploadZoneRef.current?.focus());
     } else if (wasLanding && showWorkspace) {
       requestAnimationFrame(() => workspaceHeadingRef.current?.focus());
     }
-  }, [state.stage, isLanding, showWorkspace]);
+  }, [isLanding, showWorkspace]);
 
   const scrollToUpload = useCallback(() => {
     if (!isLanding) {
       reset();
+      handleBatchReset();
     }
     // Wait a frame so the upload zone is back in the DOM after a reset.
     requestAnimationFrame(() => {
@@ -59,7 +91,7 @@ function App() {
       uploadZoneRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
       uploadZoneRef.current?.focus();
     });
-  }, [isLanding, reset]);
+  }, [isLanding, reset, handleBatchReset]);
 
   return (
     <div className="app-shell">
@@ -82,8 +114,28 @@ function App() {
               <UploadZone
                 ref={uploadZoneRef}
                 isDragActive={state.stage === "dragActive"}
-                onFile={loadFile}
+                onFiles={handleUploadFiles}
                 onDragStateChange={setDragActive}
+              />
+            </Container>
+          </Section>
+        )}
+
+        {isBatchActive && (
+          <Section compact>
+            <Container wide>
+              <BatchWorkspace
+                items={batch.state.items}
+                isProcessing={batch.state.isProcessing}
+                isComplete={batch.state.isComplete}
+                options={batch.state.options}
+                onOptionsChange={batch.setOptions}
+                onStart={batch.start}
+                onCancel={batch.cancel}
+                onRemoveItem={batch.removeItem}
+                onAddFiles={handleAddToBatch}
+                onReset={handleBatchReset}
+                rejectedCount={rejectedCount}
               />
             </Container>
           </Section>

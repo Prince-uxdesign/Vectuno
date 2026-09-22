@@ -4,7 +4,7 @@ import { FileTypeHint } from "./FileTypeHint";
 
 interface UploadZoneProps {
   isDragActive: boolean;
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
   onDragStateChange: (active: boolean) => void;
 }
 
@@ -27,7 +27,7 @@ function isDataTransferAcceptable(dataTransfer: DataTransfer): boolean {
 // stays out of the tab order so keyboard users don't hit two controls for
 // the same action. Drag-and-drop only enhances the button.
 export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(function UploadZone(
-  { isDragActive, onFile, onDragStateChange },
+  { isDragActive, onFiles, onDragStateChange },
   forwardedRef
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,10 +40,9 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
-      const file = files?.[0];
-      if (file) onFile(file);
+      if (files && files.length > 0) onFiles(Array.from(files));
     },
-    [onFile]
+    [onFiles]
   );
 
   const openPicker = useCallback(() => {
@@ -88,6 +87,7 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
         ref={inputRef}
         type="file"
         accept={ACCEPT}
+        multiple
         className="upload-zone__input"
         aria-hidden="true"
         tabIndex={-1}
@@ -103,7 +103,7 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
         type="button"
         className="upload-zone__button"
         onClick={openPicker}
-        aria-label="Upload an image to convert. Accepts PNG, JPG, JPEG, or WebP."
+        aria-label="Upload one or more images to convert. Accepts PNG, JPG, JPEG, or WebP."
       >
         <span className="upload-zone__icon" aria-hidden="true">
           {isDragInvalid ? <InvalidIcon /> : <UploadIcon />}
@@ -113,7 +113,7 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
           <span className="upload-zone__label">That file type isn't supported</span>
         ) : (
           <>
-            <span className="upload-zone__label">{isDragActive ? "Release to upload" : "Drop your image here"}</span>
+            <span className="upload-zone__label">{isDragActive ? "Release to upload" : "Drop your images here"}</span>
             <span className="upload-zone__sub">
               or <span className="upload-zone__browse">browse files</span>
             </span>

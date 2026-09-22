@@ -18,6 +18,7 @@
     "test:responsive-shots": "node scripts/responsive-shots.mjs"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "imagetracerjs": "^1.2.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
