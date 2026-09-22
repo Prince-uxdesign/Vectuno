@@ -123,16 +123,18 @@ async function testKeyboardNav() {
   const page = await browser.newPage();
   await page.goto(BASE, { waitUntil: "networkidle" });
 
-  // Tab order should be logical: logo -> nav links -> CTA -> upload zone.
-  // Walk forward (bounded) instead of assuming a fixed count, and log the
-  // sequence so a broken/illogical order is visible, not just "found it".
+  // Tab order should be logical: logo -> nav links -> CTA -> upload button.
+  // The upload control is a real <button> filling the drop zone (one tab
+  // stop), so its class is upload-zone__button. Walk forward (bounded)
+  // instead of assuming a fixed count, and log the sequence so a
+  // broken/illogical order is visible, not just "found it".
   const sequence = [];
   let reachedUploadZone = false;
   for (let i = 0; i < 8; i++) {
     await page.keyboard.press("Tab");
     const cls = await page.evaluate(() => document.activeElement?.className ?? "");
     sequence.push(cls);
-    if (cls.includes("upload-zone") && !cls.includes("upload-zone__")) {
+    if (String(cls).includes("upload-zone")) {
       reachedUploadZone = true;
       break;
     }
@@ -355,7 +357,7 @@ async function testAdvancedDisclosure() {
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
 
   ok("Advanced starts collapsed", !(await page.locator(".advanced-disclosure").evaluate((el) => el.open)));
-  const slider = page.locator('input[aria-label="Number of colors"]');
+  const slider = page.locator('.advanced-disclosure input[type="range"]');
   await page.locator(".advanced-disclosure summary").click();
   ok("Advanced expands on click", await page.locator(".advanced-disclosure").evaluate((el) => el.open));
   ok("colors slider has an accessible value text", !!(await slider.getAttribute("aria-valuetext")));

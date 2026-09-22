@@ -70,6 +70,7 @@ export function ConversionSettings({ options, onChange, disabled }: ConversionSe
 
       <Segmented
         legend="Mode"
+        hint="Color keeps the image's colors; Monochrome traces everything in black and white."
         value={options.colorMode}
         options={["color", "bw"] as const}
         labels={{ color: "Color", bw: "Monochrome" }}
@@ -98,14 +99,16 @@ export function ConversionSettings({ options, onChange, disabled }: ConversionSe
         <details className="advanced-disclosure">
           <summary>Advanced</summary>
           <label className="conversion-settings__group conversion-settings__group--advanced">
-            <span className="conversion-settings__group-label">Colors: {options.numberOfColors}</span>
+            <span className="conversion-settings__group-label" id="colors-label">
+              Colors: {options.numberOfColors}
+            </span>
             <input
               type="range"
               min={2}
               max={64}
               value={options.numberOfColors}
               onChange={(e) => onChange({ numberOfColors: Number(e.target.value) })}
-              aria-label="Number of colors"
+              aria-labelledby="colors-label"
               aria-valuetext={`${options.numberOfColors} colors`}
             />
             <p className="conversion-settings__hint">

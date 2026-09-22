@@ -1082,6 +1082,13 @@ summary:focus-visible,
   box-shadow: 0 0 0 6px var(--white);
 }
 
+/* Programmatic focus targets (tabindex="-1") are never Tab stops, so no
+   ring is needed when focus is moved there after a screen transition —
+   screen readers still announce the focused heading/alert. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* ---------- Short viewports (landscape phones, ~380-500px tall) ---------- */
 
 /* Otherwise the header + heading alone consume most of the visible height
