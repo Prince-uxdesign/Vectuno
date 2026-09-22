@@ -1,21 +1,24 @@
 import type { ConversionOptions } from "../types";
 
-interface ControlsPanelProps {
+interface ConversionSettingsProps {
   options: ConversionOptions;
   onChange: (options: Partial<ConversionOptions>) => void;
-  onConvert: () => void;
-  isConverting: boolean;
   disabled: boolean;
 }
 
-export function ControlsPanel({ options, onChange, onConvert, isConverting, disabled }: ControlsPanelProps) {
+export function ConversionSettings({ options, onChange, disabled }: ConversionSettingsProps) {
   return (
-    <div className="controls-panel">
-      <fieldset className="controls-panel__group">
-        <legend>Color mode</legend>
-        <div className="controls-panel__segmented">
+    <fieldset className="conversion-settings" disabled={disabled}>
+      <legend className="conversion-settings__title">Conversion settings</legend>
+
+      <div className="conversion-settings__group">
+        <span className="conversion-settings__group-label" id="color-mode-label">
+          Color mode
+        </span>
+        <div className="segmented" role="group" aria-labelledby="color-mode-label">
           <button
             type="button"
+            aria-pressed={options.colorMode === "color"}
             className={options.colorMode === "color" ? "is-active" : ""}
             onClick={() => onChange({ colorMode: "color" })}
           >
@@ -23,34 +26,39 @@ export function ControlsPanel({ options, onChange, onConvert, isConverting, disa
           </button>
           <button
             type="button"
+            aria-pressed={options.colorMode === "bw"}
             className={options.colorMode === "bw" ? "is-active" : ""}
             onClick={() => onChange({ colorMode: "bw" })}
           >
             Black & white
           </button>
         </div>
-      </fieldset>
+      </div>
 
       {options.colorMode === "color" && (
-        <label className="controls-panel__group">
-          <span>Colors: {options.numberOfColors}</span>
+        <label className="conversion-settings__group">
+          <span className="conversion-settings__group-label">Colors: {options.numberOfColors}</span>
           <input
             type="range"
             min={2}
             max={64}
             value={options.numberOfColors}
             onChange={(e) => onChange({ numberOfColors: Number(e.target.value) })}
+            aria-label="Number of colors"
           />
         </label>
       )}
 
-      <fieldset className="controls-panel__group">
-        <legend>Detail</legend>
-        <div className="controls-panel__segmented">
+      <div className="conversion-settings__group">
+        <span className="conversion-settings__group-label" id="detail-label">
+          Detail
+        </span>
+        <div className="segmented" role="group" aria-labelledby="detail-label">
           {(["low", "medium", "high"] as const).map((level) => (
             <button
               key={level}
               type="button"
+              aria-pressed={options.detail === level}
               className={options.detail === level ? "is-active" : ""}
               onClick={() => onChange({ detail: level })}
             >
@@ -58,22 +66,19 @@ export function ControlsPanel({ options, onChange, onConvert, isConverting, disa
             </button>
           ))}
         </div>
-      </fieldset>
+      </div>
 
-      <label className="controls-panel__group">
-        <span>Smoothing: {Math.round(options.smoothing * 100)}%</span>
+      <label className="conversion-settings__group">
+        <span className="conversion-settings__group-label">Smoothing: {Math.round(options.smoothing * 100)}%</span>
         <input
           type="range"
           min={0}
           max={100}
           value={Math.round(options.smoothing * 100)}
           onChange={(e) => onChange({ smoothing: Number(e.target.value) / 100 })}
+          aria-label="Smoothing"
         />
       </label>
-
-      <button type="button" className="controls-panel__convert" onClick={onConvert} disabled={disabled || isConverting}>
-        {isConverting ? "Converting…" : "Convert to SVG"}
-      </button>
-    </div>
+    </fieldset>
   );
 }

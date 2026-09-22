@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import path from "path";
 
-const BASE = "http://localhost:5184";
+const BASE = "http://localhost:5185";
 const FIXTURES = path.resolve("test/fixtures");
 
 const browser = await chromium.launch();
