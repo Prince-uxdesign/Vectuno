@@ -757,6 +757,15 @@ button {
   font-size: var(--text-md);
 }
 
+.result-screen__copy {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
 /* Desktop: give the comparison room to breathe and put metadata + actions in
    a dedicated sidebar rather than forcing a two-column squeeze at tablet
    widths. */
