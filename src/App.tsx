@@ -1,122 +1,84 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { UploadZone } from "./components/UploadZone";
+import { ControlsPanel } from "./components/ControlsPanel";
+import { PreviewPanel } from "./components/PreviewPanel";
+import { useConverter } from "./state/useConverter";
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+function downloadSvg(svg: string, filename: string) {
+  const blob = new Blob([svg], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-export default App
+function App() {
+  const { state, loadFile, setOptions, convert, reset } = useConverter();
+  const isBusy = state.stage === "validating" || state.stage === "decoding" || state.stage === "converting";
+
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <span className="app-header__logo">Vectuno</span>
+        <nav className="app-header__nav">
+          <a href="#">Convert</a>
+        </nav>
+      </header>
+
+      <main className="app-main">
+        <div className="app-main__intro">
+          <h1>Image to Vector</h1>
+          <p>Upload a PNG, JPG, or WebP and convert it to a clean SVG — entirely in your browser.</p>
+        </div>
+
+        {!state.file && (
+          <>
+            <UploadZone onFile={loadFile} />
+            {state.errorMessage && <p className="app-error">{state.errorMessage}</p>}
+          </>
+        )}
+
+        {state.file && (
+          <div className="workspace">
+            <PreviewPanel sourcePreviewUrl={state.previewUrl} result={state.result} />
+
+            <ControlsPanel
+              options={state.options}
+              onChange={setOptions}
+              onConvert={convert}
+              isConverting={state.stage === "converting"}
+              disabled={!state.decoded}
+            />
+
+            {state.decoded?.wasDownsampled && (
+              <p className="app-notice">
+                This image was downsampled to {state.decoded.processedWidth}×{state.decoded.processedHeight} for
+                processing (original {state.decoded.originalWidth}×{state.decoded.originalHeight}).
+              </p>
+            )}
+
+            {state.errorMessage && <p className="app-error">{state.errorMessage}</p>}
+
+            <div className="workspace__actions">
+              <button type="button" className="app-secondary" onClick={reset} disabled={isBusy}>
+                Start over
+              </button>
+              {state.result && (
+                <button
+                  type="button"
+                  className="app-primary"
+                  onClick={() => downloadSvg(state.result!.svg, "vectuno-export.svg")}
+                >
+                  Download SVG
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default App;
