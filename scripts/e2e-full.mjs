@@ -32,7 +32,7 @@ async function testFullWorkflow(fileName) {
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, fileName));
 
   // Preparing -> Ready
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   ok("reaches ready state", true);
   ok("shows file preview image", await page.locator(".file-preview__image").isVisible());
   ok("shows file metadata (name)", (await page.locator(".file-metadata").textContent())?.includes(fileName));
@@ -82,7 +82,7 @@ async function testBreakpoint(width) {
   ok(`${width}px: no horizontal scroll (empty state)`, !hScroll);
 
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   const hScroll2 = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
   );
@@ -133,7 +133,7 @@ async function testKeyboardNav() {
   ok("Enter on upload zone opens file chooser", !!chooser);
   await chooser.setFiles(path.join(FIXTURES, "01-bw-logo.png"));
 
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
 
   // Tab through settings and confirm focus-visible outline applies somewhere
   await page.keyboard.press("Tab");
@@ -158,7 +158,7 @@ async function testTouch() {
   const chooser = await chooserPromise;
   ok("tap on upload zone opens file chooser", !!chooser);
   await chooser.setFiles(path.join(FIXTURES, "03-icon.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.locator(".conversion-status .btn-primary").tap();
   await page.waitForSelector(".result-preview", { timeout: 30000 });
   ok("tap-driven conversion reaches result", await page.locator(".result-preview").isVisible());
@@ -178,7 +178,9 @@ async function testRejection() {
   });
   await page.locator(".error-state").waitFor({ timeout: 10000 });
   const msg = await page.locator(".error-state__message").textContent();
-  ok("unsupported file shows error", !!msg, msg ?? "");
+  const hint = await page.locator(".error-state__hint").textContent();
+  ok("unsupported file shows error message", !!msg, msg ?? "");
+  ok("unsupported file shows an actionable hint", !!hint, hint ?? "");
   ok("unsupported file offers 'choose different image'", await page.locator(".error-state__actions .btn-secondary").isVisible());
   ok("unsupported file does NOT offer 'try again' (file is the problem)", (await page.locator(".error-state__actions .btn-primary").count()) === 0);
 
@@ -195,7 +197,9 @@ async function testOversizedAndCorrupted() {
     await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, file));
     await page.locator(".error-state").waitFor({ timeout: 10000 });
     const msg = await page.locator(".error-state__message").textContent();
+    const hint = await page.locator(".error-state__hint").textContent();
     ok(`${file} shows a specific, non-technical error`, !!msg && !/stack|undefined|NaN/i.test(msg), msg ?? "");
+    ok(`${file} shows an actionable hint`, !!hint && !/stack|undefined|NaN/i.test(hint), hint ?? "");
     await page.close();
   }
 }
@@ -224,7 +228,7 @@ async function testConversionFailure() {
   });
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.locator(".conversion-status .btn-primary").click();
   await page.locator(".error-state").waitFor({ timeout: 10000 });
   const msg = await page.locator(".error-state__message").textContent();
@@ -240,7 +244,7 @@ async function testReplaceImage() {
   const page = await browser.newPage();
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "01-bw-logo.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   const nameBefore = await page.locator(".file-metadata").textContent();
   ok("shows first file name", nameBefore?.includes("01-bw-logo.png") ?? false);
 
@@ -248,7 +252,7 @@ async function testReplaceImage() {
   ok("change image returns to upload zone", await page.locator(".upload-zone").isVisible());
 
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   const nameAfter = await page.locator(".file-metadata").textContent();
   ok("shows second file name after replace", nameAfter?.includes("02-color-logo.png") ?? false);
   await page.close();
@@ -262,13 +266,133 @@ async function testSequentialConversions() {
   const files = ["01-bw-logo.png", "02-color-logo.png", "05-transparent.png"];
   for (const file of files) {
     await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, file));
-    await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+    await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
     await page.locator(".conversion-status .btn-primary").click();
     await page.waitForSelector(".result-preview", { timeout: 30000 });
     ok(`sequential: ${file} converted`, await page.locator(".result-preview").isVisible());
     await page.locator(".workspace__actions .btn-secondary").click(); // "Convert another image"
     ok(`sequential: returns to empty state after ${file}`, await page.locator(".upload-zone").isVisible());
   }
+  await page.close();
+}
+
+// ---------- 9. Settings genuinely change output ----------
+async function testSettingsChangeOutput() {
+  console.log("\n[settings change output]");
+
+  async function convertWith(detail, smoothness) {
+    const page = await browser.newPage();
+    await page.goto(BASE, { waitUntil: "networkidle" });
+    await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+    await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+    await page.getByRole("group", { name: "Detail" }).getByRole("button", { name: detail, exact: true }).click();
+    await page
+      .getByRole("group", { name: "Smoothness" })
+      .getByRole("button", { name: smoothness, exact: true })
+      .click();
+    await page.locator(".conversion-status__cta").click();
+    await page.waitForSelector(".result-preview", { timeout: 30000 });
+    const stats = await page.locator(".result-preview__stats").textContent();
+    await page.close();
+    const paths = Number(/Paths(\d+)/.exec(stats ?? "")?.[1] ?? -1);
+    return { stats, paths };
+  }
+
+  const low = await convertWith("Low", "Low");
+  const high = await convertWith("High", "High");
+  ok(
+    "Low detail/smoothness produces fewer paths than High (real, measurable difference)",
+    low.paths >= 0 && high.paths > low.paths,
+    `low=${low.stats} high=${high.stats}`
+  );
+
+  // Monochrome mode should hide the Advanced (colors) section entirely —
+  // colour count is meaningless once output is forced to 2 colors.
+  const page = await browser.newPage();
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  ok("Advanced (colors) visible in Color mode", await page.locator(".advanced-disclosure").isVisible());
+  await page.getByRole("group", { name: "Mode" }).getByRole("button", { name: "Monochrome" }).click();
+  ok("Advanced (colors) hidden in Monochrome mode", (await page.locator(".advanced-disclosure").count()) === 0);
+  await page.close();
+}
+
+// ---------- 10. Advanced disclosure ----------
+async function testAdvancedDisclosure() {
+  console.log("\n[advanced disclosure]");
+  const page = await browser.newPage();
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+
+  ok("Advanced starts collapsed", !(await page.locator(".advanced-disclosure").evaluate((el) => el.open)));
+  const slider = page.locator('input[aria-label="Number of colors"]');
+  await page.locator(".advanced-disclosure summary").click();
+  ok("Advanced expands on click", await page.locator(".advanced-disclosure").evaluate((el) => el.open));
+  ok("colors slider has an accessible value text", !!(await slider.getAttribute("aria-valuetext")));
+
+  // Keyboard: focus the summary and toggle with Enter (native <details> behavior).
+  await page.locator(".advanced-disclosure summary").click(); // collapse again
+  await page.locator(".advanced-disclosure summary").focus();
+  await page.keyboard.press("Enter");
+  ok("Advanced is keyboard-toggleable", await page.locator(".advanced-disclosure").evaluate((el) => el.open));
+
+  await page.close();
+}
+
+// ---------- 11. Cancellation ----------
+async function testCancellation() {
+  console.log("\n[cancellation]");
+  const page = await browser.newPage();
+  // Slow the worker down (without breaking it) so there's a real window to cancel in.
+  await page.addInitScript(() => {
+    const OriginalWorker = window.Worker;
+    window.Worker = class SlowWorker extends OriginalWorker {
+      constructor(url, opts) {
+        super(url, opts);
+        const realPostMessage = this.postMessage.bind(this);
+        this.postMessage = (data) => {
+          setTimeout(() => realPostMessage(data), 4000);
+        };
+      }
+    };
+  });
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__cta").click();
+  await page.locator(".conversion-status__headline", { hasText: /Vectorizing/ }).waitFor({ timeout: 5000 });
+  ok("Cancel button appears while converting", await page.locator(".conversion-status__actions button").isVisible());
+
+  await page.locator(".conversion-status__actions button", { hasText: "Cancel" }).click();
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 5000 });
+  ok("Cancelling returns to ready (not error)", (await page.locator(".error-state").count()) === 0);
+
+  // Converting again afterward should work normally — cancellation must not
+  // leave the pipeline in a broken state.
+  await page.locator(".conversion-status__cta").click();
+  await page.waitForSelector(".result-preview", { timeout: 30000 });
+  ok("conversion works normally after a prior cancel", await page.locator(".result-preview").isVisible());
+  await page.close();
+}
+
+// ---------- 12. Changing settings does not auto-convert ----------
+async function testNoAutoConvert() {
+  console.log("\n[no accidental auto-convert]");
+  const page = await browser.newPage();
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  // Flip every core setting; none of this should trigger a conversion.
+  await page.getByRole("group", { name: "Detail" }).getByRole("button", { name: "High", exact: true }).click();
+  await page.getByRole("group", { name: "Smoothness" }).getByRole("button", { name: "Low", exact: true }).click();
+  await page.getByRole("group", { name: "Mode" }).getByRole("button", { name: "Monochrome" }).click();
+  await page.waitForTimeout(500);
+  ok(
+    "changing settings does not start a conversion",
+    (await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).count()) > 0
+  );
   await page.close();
 }
 
@@ -292,6 +416,10 @@ await testOversizedAndCorrupted();
 await testConversionFailure();
 await testReplaceImage();
 await testSequentialConversions();
+await testSettingsChangeOutput();
+await testAdvancedDisclosure();
+await testCancellation();
+await testNoAutoConvert();
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);

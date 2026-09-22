@@ -64,6 +64,18 @@ body {
   min-height: 100vh;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 button {
   font: inherit;
   cursor: pointer;
@@ -480,6 +492,13 @@ button {
   color: var(--muted);
 }
 
+.conversion-settings__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .segmented {
   display: flex;
   border: 1px solid var(--border-strong);
@@ -489,6 +508,10 @@ button {
 
 .segmented button {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--bg);
   color: var(--fg);
   border: none;
@@ -509,12 +532,73 @@ button {
 .segmented button.is-active {
   background: var(--fg);
   color: var(--bg);
+  font-weight: 600;
 }
 
+/* Selection is never color-only: the active segment also gets a checkmark
+   and goes bold, both visible to colorblind users and in forced-colors mode. */
+.segmented__check {
+  flex-shrink: 0;
+}
+
+/* ---------- Advanced disclosure ---------- */
+
+.advanced-disclosure {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.advanced-disclosure summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+
+.advanced-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-disclosure summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.advanced-disclosure[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.advanced-disclosure__body,
+.advanced-disclosure .conversion-settings__group--advanced {
+  padding-top: var(--space-4);
+}
+
+/* Larger thumb for comfortable touch interaction; track is tall enough to
+   tap accurately without being visually heavy. */
 .conversion-settings input[type="range"] {
   width: 100%;
   accent-color: var(--fg);
-  min-height: 24px;
+  height: 28px;
+}
+
+.conversion-settings input[type="range"]::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+}
+
+.conversion-settings input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: none;
 }
 
 /* ---------- ConversionStatus ---------- */
@@ -524,16 +608,34 @@ button {
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  text-align: center;
 }
 
 .conversion-status__text {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  min-height: 1.2em;
+}
+
+.conversion-status__headline {
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.conversion-status__subtext {
   color: var(--muted);
-  font-size: 0.9rem;
-  min-height: 1.2em;
+  font-size: 0.85rem;
+}
+
+.conversion-status__actions {
+  display: flex;
+  gap: 12px;
 }
 
 .conversion-status__cta {
@@ -653,6 +755,13 @@ button {
   margin: 0;
   color: var(--error);
   font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.error-state__hint {
+  margin: calc(var(--space-1) * -1) 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .error-state__actions {

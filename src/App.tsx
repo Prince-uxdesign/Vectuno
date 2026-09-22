@@ -15,7 +15,7 @@ import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
 
 function App() {
-  const { state, loadFile, setOptions, convert, reset, setDragActive } = useConverter();
+  const { state, loadFile, setOptions, convert, cancel, reset, setDragActive } = useConverter();
   const uploadZoneRef = useRef<HTMLDivElement>(null);
 
   const isLanding = state.stage === "empty" || state.stage === "dragActive";
@@ -105,22 +105,23 @@ function App() {
                 </div>
 
                 <div className="workspace__panel">
-                  <ConversionSettings
-                    options={state.options}
-                    onChange={setOptions}
-                    disabled={state.stage === "converting"}
-                  />
-
                   {isRetryableError ? (
                     <ErrorState
-                      message={state.errorMessage ?? "Something went wrong."}
+                      message={state.errorMessage ?? "Something unexpected happened."}
+                      hint={state.errorHint ?? "Try again, or choose a different image."}
                       recovery="retry"
                       onRetry={convert}
                       onChooseNew={reset}
                     />
                   ) : (
-                    <ConversionStatus stage={state.stage} onConvert={convert} />
+                    <ConversionStatus stage={state.stage} onConvert={convert} onCancel={cancel} />
                   )}
+
+                  <ConversionSettings
+                    options={state.options}
+                    onChange={setOptions}
+                    disabled={state.stage === "converting"}
+                  />
                 </div>
               </div>
             </Container>
@@ -148,7 +149,8 @@ function App() {
           <Section compact>
             <Container>
               <ErrorState
-                message={state.errorMessage ?? "Something went wrong."}
+                message={state.errorMessage ?? "Something unexpected happened."}
+                hint={state.errorHint ?? "Try again, or choose a different image."}
                 recovery={state.errorRecovery ?? "chooseNew"}
                 onRetry={convert}
                 onChooseNew={reset}
@@ -156,6 +158,13 @@ function App() {
             </Container>
           </Section>
         )}
+
+        {/* Persistent (not conditionally mounted) so screen readers reliably
+            announce the text change on success — see accessibility notes in
+            the phase README. */}
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {state.stage === "success" ? "Vectorization complete. Preview and download are ready below." : ""}
+        </p>
 
         {isLanding && (
           <>

@@ -18,7 +18,7 @@ const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     await page.goto(BASE, { waitUntil: "networkidle" });
     await page.locator('input[type="file"]').setInputFiles(longNamePath);
-    await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+    await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
     const hScroll = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     console.log(`${width}px long-filename horizontalScroll=${hScroll}`);
     await page.screenshot({ path: path.join(OUT, `long-filename-${width}.png`) });
@@ -48,7 +48,7 @@ async function testRealDrag(width) {
   await page.screenshot({ path: path.join(OUT, `drag-active-${width}.png`) });
 
   await page.locator(".upload-zone").dispatchEvent("drop", { dataTransfer });
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   console.log(`${width}px real drop -> reached ready state`);
   await page.close();
 }
@@ -71,9 +71,9 @@ await testRealDrag(1440);
   });
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.locator(".conversion-status .btn-primary").click();
-  await page.locator(".conversion-status__text", { hasText: /Converting/ }).waitFor({ timeout: 5000 });
+  await page.locator(".conversion-status__headline", { hasText: /Vectorizing/ }).waitFor({ timeout: 5000 });
 
   const changeImageDisabled = await page.locator(".file-preview .btn-secondary").isDisabled();
   console.log(`Change-image button disabled while converting: ${changeImageDisabled}`);
@@ -92,7 +92,7 @@ for (const width of [320, 768, 1440]) {
   await page.screenshot({ path: path.join(OUT, `empty-${width}.png`) });
 
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "06-multicolor-illustration.png"));
-  await page.locator(".conversion-status__text", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
+  await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.screenshot({ path: path.join(OUT, `ready-${width}.png`), fullPage: true });
 
   await page.locator(".conversion-status .btn-primary").click();

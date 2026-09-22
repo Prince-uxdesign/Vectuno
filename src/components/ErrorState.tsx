@@ -3,12 +3,13 @@ import { Button } from "./ui/Button";
 
 interface ErrorStateProps {
   message: string;
+  hint: string;
   recovery: ErrorRecovery;
   onRetry: () => void;
   onChooseNew: () => void;
 }
 
-export function ErrorState({ message, recovery, onRetry, onChooseNew }: ErrorStateProps) {
+export function ErrorState({ message, hint, recovery, onRetry, onChooseNew }: ErrorStateProps) {
   return (
     <div className="error-state" role="alert">
       <span className="error-state__icon" aria-hidden="true">
@@ -19,6 +20,7 @@ export function ErrorState({ message, recovery, onRetry, onChooseNew }: ErrorSta
         </svg>
       </span>
       <p className="error-state__message">{message}</p>
+      <p className="error-state__hint">{hint}</p>
       <div className="error-state__actions">
         {recovery === "retry" && (
           <Button variant="primary" onClick={onRetry}>

@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "test:fixtures": "node scripts/gen-test-images.mjs",
     "test:benchmark": "node scripts/benchmark-vectorizers.mjs",
-    "test:e2e": "node scripts/e2e-probe.mjs",
-    "test:e2e-full": "node scripts/e2e-full.mjs",
+    "test:settings": "node scripts/benchmark-settings.mjs",
+    "test:e2e": "node scripts/e2e-full.mjs",
     "test:visual": "node scripts/visual-probe.mjs",
     "test:design": "node scripts/design-screenshots.mjs"
   },
