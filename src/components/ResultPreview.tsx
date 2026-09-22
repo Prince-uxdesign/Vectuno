@@ -5,6 +5,7 @@ import { CompareSlider } from "./CompareSlider";
 import { ResultMetadata } from "./ResultMetadata";
 import { DownloadButton } from "./DownloadButton";
 import { CopySvgButton } from "./CopySvgButton";
+import { RasterExportButtons } from "./RasterExportButtons";
 import { Button } from "./ui/Button";
 
 interface ResultPreviewProps {
@@ -77,6 +78,12 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
               Convert another image
             </Button>
             <CopySvgButton svg={result.svg} />
+            <RasterExportButtons
+              svg={result.svg}
+              width={decoded.originalWidth}
+              height={decoded.originalHeight}
+              sourceFilename={sourceFilename}
+            />
           </div>
 
           {downloadFailed && (
