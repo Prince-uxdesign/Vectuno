@@ -1,21 +1,30 @@
 import { UploadZone } from "./components/UploadZone";
-import { ControlsPanel } from "./components/ControlsPanel";
-import { PreviewPanel } from "./components/PreviewPanel";
+import { FilePreview } from "./components/FilePreview";
+import { FileMetadata } from "./components/FileMetadata";
+import { ConversionSettings } from "./components/ConversionSettings";
+import { ConversionStatus } from "./components/ConversionStatus";
+import { ResultPreview } from "./components/ResultPreview";
+import { DownloadButton } from "./components/DownloadButton";
+import { ErrorState } from "./components/ErrorState";
 import { useConverter } from "./state/useConverter";
 
-function downloadSvg(svg: string, filename: string) {
-  const blob = new Blob([svg], { type: "image/svg+xml" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function App() {
-  const { state, loadFile, setOptions, convert, reset } = useConverter();
-  const isBusy = state.stage === "validating" || state.stage === "decoding" || state.stage === "converting";
+  const { state, loadFile, setOptions, convert, reset, setDragActive } = useConverter();
+
+  const showUpload = state.stage === "empty" || state.stage === "dragActive";
+  // A conversion (not upload) failure keeps the file context on screen —
+  // the file is fine, only the last convert attempt failed — so the user
+  // can retry without re-selecting anything. An upload/decode failure means
+  // the file itself was rejected, so no file context exists to show.
+  const isRetryableError = state.stage === "error" && state.errorRecovery === "retry";
+  const showWorkspace =
+    state.stage === "fileSelected" ||
+    state.stage === "preparing" ||
+    state.stage === "ready" ||
+    state.stage === "converting" ||
+    isRetryableError;
+  const showResult = state.stage === "success";
+  const showError = state.stage === "error";
 
   return (
     <div className="app-shell">
@@ -32,49 +41,84 @@ function App() {
           <p>Upload a PNG, JPG, or WebP and convert it to a clean SVG — entirely in your browser.</p>
         </div>
 
-        {!state.file && (
-          <>
-            <UploadZone onFile={loadFile} />
-            {state.errorMessage && <p className="app-error">{state.errorMessage}</p>}
-          </>
+        {showUpload && (
+          <UploadZone
+            isDragActive={state.stage === "dragActive"}
+            onFile={loadFile}
+            onDragStateChange={setDragActive}
+          />
         )}
 
-        {state.file && (
-          <div className="workspace">
-            <PreviewPanel sourcePreviewUrl={state.previewUrl} result={state.result} />
+        {showWorkspace && (
+          <div className="workspace workspace--split">
+            <div className="workspace__media">
+              {state.previewUrl && (
+                <FilePreview
+                  previewUrl={state.previewUrl}
+                  onChangeImage={reset}
+                  disabled={state.stage === "converting"}
+                />
+              )}
 
-            <ControlsPanel
-              options={state.options}
-              onChange={setOptions}
-              onConvert={convert}
-              isConverting={state.stage === "converting"}
-              disabled={!state.decoded}
-            />
+              {state.file && (
+                <FileMetadata
+                  name={state.file.name}
+                  mimeType={state.file.type}
+                  sizeBytes={state.file.size}
+                  width={state.decoded?.originalWidth ?? null}
+                  height={state.decoded?.originalHeight ?? null}
+                />
+              )}
 
-            {state.decoded?.wasDownsampled && (
-              <p className="app-notice">
-                This image was downsampled to {state.decoded.processedWidth}×{state.decoded.processedHeight} for
-                processing (original {state.decoded.originalWidth}×{state.decoded.originalHeight}).
-              </p>
-            )}
+              {state.decoded?.wasDownsampled && (
+                <p className="app-notice">
+                  This image was downsampled to {state.decoded.processedWidth}×{state.decoded.processedHeight} for
+                  processing (original {state.decoded.originalWidth}×{state.decoded.originalHeight}).
+                </p>
+              )}
+            </div>
 
-            {state.errorMessage && <p className="app-error">{state.errorMessage}</p>}
+            <div className="workspace__panel">
+              <ConversionSettings
+                options={state.options}
+                onChange={setOptions}
+                disabled={state.stage === "converting"}
+              />
 
-            <div className="workspace__actions">
-              <button type="button" className="app-secondary" onClick={reset} disabled={isBusy}>
-                Start over
-              </button>
-              {state.result && (
-                <button
-                  type="button"
-                  className="app-primary"
-                  onClick={() => downloadSvg(state.result!.svg, "vectuno-export.svg")}
-                >
-                  Download SVG
-                </button>
+              {isRetryableError ? (
+                <ErrorState
+                  message={state.errorMessage ?? "Something went wrong."}
+                  recovery="retry"
+                  onRetry={convert}
+                  onChooseNew={reset}
+                />
+              ) : (
+                <ConversionStatus stage={state.stage} onConvert={convert} />
               )}
             </div>
           </div>
+        )}
+
+        {showResult && state.result && state.previewUrl && state.file && (
+          <div className="workspace">
+            <ResultPreview sourcePreviewUrl={state.previewUrl} result={state.result} />
+
+            <div className="workspace__actions">
+              <button type="button" className="app-secondary" onClick={reset}>
+                Convert another image
+              </button>
+              <DownloadButton svg={state.result.svg} sourceFilename={state.file.name} />
+            </div>
+          </div>
+        )}
+
+        {showError && !isRetryableError && (
+          <ErrorState
+            message={state.errorMessage ?? "Something went wrong."}
+            recovery={state.errorRecovery ?? "chooseNew"}
+            onRetry={convert}
+            onChooseNew={reset}
+          />
         )}
       </main>
     </div>

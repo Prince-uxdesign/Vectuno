@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:5184";
+const BASE = "http://localhost:5185";
 const widths = [320, 375, 390, 430, 768, 820, 1024, 1280, 1440, 1920];
 
 const browser = await chromium.launch();

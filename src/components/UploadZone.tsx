@@ -1,14 +1,18 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 interface UploadZoneProps {
+  isDragActive: boolean;
   onFile: (file: File) => void;
+  onDragStateChange: (active: boolean) => void;
 }
 
-const ACCEPT = "image/png,image/jpeg,image/webp";
+const ACCEPT = "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp";
 
-export function UploadZone({ onFile }: UploadZoneProps) {
+export function UploadZone({ isDragActive, onFile, onDragStateChange }: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
+  // Drag events fire on children too; a counter avoids flicker when the
+  // pointer passes over the label/hint text inside the drop zone.
+  const dragDepthRef = useRef(0);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -20,33 +24,51 @@ export function UploadZone({ onFile }: UploadZoneProps) {
 
   return (
     <div
-      className={`upload-zone${isDragOver ? " upload-zone--active" : ""}`}
+      className={`upload-zone${isDragActive ? " upload-zone--active" : ""}`}
       onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => {
+      onDragEnter={(e) => {
         e.preventDefault();
-        setIsDragOver(true);
+        dragDepthRef.current += 1;
+        onDragStateChange(true);
       }}
-      onDragLeave={() => setIsDragOver(false)}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) onDragStateChange(false);
+      }}
       onDrop={(e) => {
         e.preventDefault();
-        setIsDragOver(false);
+        dragDepthRef.current = 0;
+        onDragStateChange(false);
         handleFiles(e.dataTransfer.files);
       }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          inputRef.current?.click();
+        }
       }}
-      aria-label="Upload an image to convert"
+      aria-label="Upload an image to convert. PNG, JPG, JPEG, or WebP."
     >
       <input
         ref={inputRef}
         type="file"
         accept={ACCEPT}
         className="upload-zone__input"
-        onChange={(e) => handleFiles(e.target.files)}
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(e) => {
+          handleFiles(e.target.files);
+          // allow selecting the same file again after "Change image"
+          e.target.value = "";
+        }}
       />
-      <span className="upload-zone__label">Click, or drop your image here</span>
+      <span className="upload-zone__label">
+        {isDragActive ? "Drop to upload" : "Click, or drop your image here"}
+      </span>
       <span className="upload-zone__hint">PNG, JPG, JPEG, WebP</span>
     </div>
   );
