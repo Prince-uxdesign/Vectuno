@@ -125,6 +125,10 @@ export function useConverter() {
 
   const convert = useCallback(async () => {
     if (!state.decoded) return;
+    // Guard against double-submission (e.g. rapid Enter presses before the
+    // CONVERT_START re-render swaps the button for Cancel): one conversion
+    // owns the worker at a time.
+    if (abortControllerRef.current) return;
     const controller = new AbortController();
     abortControllerRef.current = controller;
     dispatch({ type: "CONVERT_START" });

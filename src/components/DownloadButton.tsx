@@ -16,7 +16,11 @@ export function DownloadButton({ svg, sourceFilename, onError }: DownloadButtonP
       const a = document.createElement("a");
       a.href = url;
       a.download = deriveSvgFilename(sourceFilename);
+      // Appended to the DOM: required for the download to trigger in some
+      // browsers (e.g. Safari ignores clicks on detached anchors).
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       URL.revokeObjectURL(url);
     } catch {
       onError?.();

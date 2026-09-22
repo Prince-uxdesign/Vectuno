@@ -140,13 +140,28 @@ export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width,
       </span>
 
       <div className="compare-slider__toggle segmented" role="group" aria-label="Switch between original and vector">
-        <button type="button" className={position === 100 ? "is-active" : ""} onClick={() => setPosition(100)}>
+        <button
+          type="button"
+          className={position === 100 ? "is-active" : ""}
+          aria-pressed={position === 100}
+          onClick={() => setPosition(100)}
+        >
           Original
         </button>
-        <button type="button" className={position > 0 && position < 100 ? "is-active" : ""} onClick={() => setPosition(50)}>
+        <button
+          type="button"
+          className={position > 0 && position < 100 ? "is-active" : ""}
+          aria-pressed={position > 0 && position < 100}
+          onClick={() => setPosition(50)}
+        >
           Split
         </button>
-        <button type="button" className={position === 0 ? "is-active" : ""} onClick={() => setPosition(0)}>
+        <button
+          type="button"
+          className={position === 0 ? "is-active" : ""}
+          aria-pressed={position === 0}
+          onClick={() => setPosition(0)}
+        >
           Vector
         </button>
       </div>
