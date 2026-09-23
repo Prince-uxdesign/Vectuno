@@ -2,15 +2,28 @@ import { useEffect, useRef } from "react";
 import type { ErrorRecovery } from "../types";
 import { Button } from "./ui/Button";
 
+interface ErrorSuggestion {
+  label: string;
+  onSelect: () => void;
+}
+
 interface ErrorStateProps {
   message: string;
   hint: string;
   recovery: ErrorRecovery;
   onRetry: () => void;
   onChooseNew: () => void;
+  // Optional context appended after the hint — e.g. photographic-detail
+  // guidance when the failed image is known to be complex. Never replaces
+  // the primary hint.
+  extraHint?: string | null;
+  // Optional alternative actions (e.g. "Try Clean mode"). Rendered as quiet
+  // ghost buttons: the primary/secondary recovery pair stays the single
+  // unambiguous path, and automated checks on those selectors keep holding.
+  suggestions?: ErrorSuggestion[];
 }
 
-export function ErrorState({ message, hint, recovery, onRetry, onChooseNew }: ErrorStateProps) {
+export function ErrorState({ message, hint, recovery, onRetry, onChooseNew, extraHint, suggestions }: ErrorStateProps) {
   // The error replaces whatever the user was interacting with (upload zone,
   // Convert button), so focus would otherwise be lost to <body>. Moving it
   // here parks keyboard users on the recovery actions and the role="alert"
@@ -31,6 +44,7 @@ export function ErrorState({ message, hint, recovery, onRetry, onChooseNew }: Er
       </span>
       <p className="error-state__message">{message}</p>
       <p className="error-state__hint">{hint}</p>
+      {extraHint && <p className="error-state__hint">{extraHint}</p>}
       <div className="error-state__actions">
         {recovery === "retry" && (
           <Button variant="primary" onClick={onRetry}>
@@ -40,6 +54,11 @@ export function ErrorState({ message, hint, recovery, onRetry, onChooseNew }: Er
         <Button variant="secondary" onClick={onChooseNew}>
           Choose a different image
         </Button>
+        {suggestions?.map((suggestion) => (
+          <Button key={suggestion.label} variant="ghost" onClick={suggestion.onSelect}>
+            {suggestion.label}
+          </Button>
+        ))}
       </div>
     </div>
   );

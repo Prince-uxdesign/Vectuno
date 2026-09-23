@@ -169,8 +169,26 @@ returns straight to `ready` (not `error`) — it isn't a failure.
 ## Other conversion-result features
 
 - **Compare slider** (`CompareSlider`) — drag to reveal original vs.
-  vectorized result side by side.
-- **Copy SVG to clipboard** (`CopySvgButton`) alongside the download button.
+  vectorized result side by side, with Original/Split/Vector shortcuts.
+- **Zoom** (`ResultZoomControls`) — Fit plus 100%/200%/400% presets render at
+  multiples of the natural pixel size inside a scrollable viewport, so close
+  inspection never breaks the page layout.
+- **Preview background** (`BackgroundToggle`) — Checker/White/Black backdrop,
+  preview-only, never baked into the SVG.
+- **SVG code view** (`SvgCodeViewer`) — Preview/SVG Code tabs with formatted,
+  scrollable markup of the exact file being downloaded.
+- **Detected palette** (`SvgPalette` / `lib/svg/inspect.ts`) — fills parsed
+  from the generated SVG, most-used first, with Copy palette.
+- **Copy SVG to clipboard** (`CopySvgButton` + `lib/utils/clipboard.ts`)
+  alongside the download button.
+- **Open SVG** (`OpenSvgButton`) — the genuine SVG in a new tab, with a
+  recovery message if a popup blocker stops it.
+- **Figma handoff** (`FigmaHandoff`) — Copy SVG for Figma plus paste guidance
+  (no fake deep link; the browser can't force-launch the desktop app).
+- **Quality guidance** (`QualityNotice` / `lib/image/quality.ts`) — a calm,
+  non-blocking notice when the source looks photographic/complex or very
+  small; the same signal adds preset suggestions ("Try Clean mode") to a
+  failed conversion's recovery actions.
 - **Raster export** (`RasterExportButtons` / `lib/utils/rasterExport.ts`) —
   export the result as PNG or JPEG, rendered from the SVG on a canvas
   (capped at 4096px per side, 2x source resolution).
@@ -188,11 +206,15 @@ src/
   lib/
     image/          validate.ts (MIME + extension fallback + size),
                      decode.ts (createImageBitmap → canvas → downsample, dimension check),
-                     transparency.ts
+                     sniff.ts (magic-number type detection), transparency.ts,
+                     quality.ts (photo-like / tiny guidance signals)
     engine/         presets.ts (options → imagetracerjs config), vectorize.worker.ts,
                      vectorizeClient.ts (worker wrapper w/ timeout + typed errors),
                      optimizeSvg.ts (viewBox + dead-attribute cleanup)
-    utils/          filename.ts, download.ts, rasterExport.ts, zip.ts, format.ts
+    input/          paste.ts (clipboard DataTransfer → Files)
+    svg/            inspect.ts (palette extraction + markup formatting)
+    utils/          filename.ts, download.ts, rasterExport.ts, zip.ts, format.ts,
+                     clipboard.ts (copy-to-clipboard with fallback)
   state/            useConverter.ts (single file), useBatchConverter.ts (batch),
                      useRotatingFact.ts (ConversionLoader fact rotation)
   components/
@@ -209,11 +231,18 @@ src/
     ConversionSettings     preset picker + collapsed Advanced (Colors)
     ConversionStatus       headline+subtext status, Convert trigger
     ConversionLoader       dedicated "converting" screen with rotating facts
-    ResultPreview           CompareSlider + result metadata + actions
-    ResultMetadata          SVG size / path count / elapsed time
-    DownloadButton, CopySvgButton, RasterExportButtons
+    ResultPreview           workspace: tabs, zoom, CompareSlider, background,
+                            actions, technical details, palette, Figma handoff
+    ResultMetadata          format / dimensions / file size / paths / colors
+    ResultZoomControls      Fit + 100/200/400% zoom stepper and presets
+    SvgCodeViewer           formatted, scrollable SVG markup + copy
+    SvgPalette              detected-colors swatches + Copy palette
+    DownloadButton, CopySvgButton, OpenSvgButton, FigmaHandoff,
+    RasterExportButtons
+    QualityNotice           calm photo-like / tiny-source guidance (non-blocking)
     BatchWorkspace          queue, per-item status/download, zip-all
-    ErrorState              icon + message + hint + recovery-appropriate action(s)
+    ErrorState              icon + message + hint + recovery-appropriate action(s),
+                            plus contextual preset suggestions on complex-image failures
     RootErrorBoundary       last-resort render-error fallback (see src/main.tsx)
   App.tsx           Composes single-file vs. batch vs. landing off both hooks' state
 scripts/            Test fixture generation, benchmark, e2e/visual probes
@@ -285,9 +314,9 @@ Product-level, as of this phase:
   Vectorizing) with an indeterminate spinner.
 - No Background Keep/Remove setting — `imagetracerjs` has no background
   detection/removal capability to map; see "Conversion settings" above.
-- No automatic photo-vs-illustration detection — a photographic source will
-  still trace (and often produce a very large SVG); the settings/hint copy
-  doesn't yet warn the user before they hit Convert.
+- Photographic sources get an expectation-setting notice (and preset
+  suggestions if conversion fails), but nothing is blocked — a photograph
+  will still trace, often into a very large SVG.
 - "How it works" and "About" are anchors on the same page, not separate
   routes. The header nav collapses to Logo + "Start converting" below 640px;
   the footer carries the same two links as a mobile-only fallback.

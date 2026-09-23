@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { copyText } from "../lib/utils/clipboard";
 import { Button } from "./ui/Button";
 
 interface CopySvgButtonProps {
@@ -6,24 +7,6 @@ interface CopySvgButtonProps {
 }
 
 type CopyState = "idle" | "copied" | "failed";
-
-function copyViaTextarea(text: string): boolean {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  let succeeded = false;
-  try {
-    succeeded = document.execCommand("copy");
-  } catch {
-    succeeded = false;
-  }
-  textarea.remove();
-  return succeeded;
-}
 
 export function CopySvgButton({ svg }: CopySvgButtonProps) {
   const [state, setState] = useState<CopyState>("idle");
@@ -35,17 +18,8 @@ export function CopySvgButton({ svg }: CopySvgButtonProps) {
 
   const handleCopy = useCallback(async () => {
     clearTimeout(resetTimerRef.current);
-    let succeeded = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(svg);
-        succeeded = true;
-      } else {
-        succeeded = copyViaTextarea(svg);
-      }
-    } catch {
-      succeeded = copyViaTextarea(svg);
-    }
+    // The exact string the preview renders and the download saves.
+    const succeeded = await copyText(svg);
     setState(succeeded ? "copied" : "failed");
     resetTimerRef.current = setTimeout(() => setState("idle"), 2000);
   }, [svg]);

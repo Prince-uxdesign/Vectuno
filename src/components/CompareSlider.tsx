@@ -9,6 +9,9 @@ interface CompareSliderProps {
   height: number;
   // Preview-only backdrop, or null for opaque images where it wouldn't show.
   background: PreviewBackground | null;
+  // "fill" makes the frame match its parent's width exactly (used inside a
+  // zoom-controlled stage) instead of capping itself to the viewport budget.
+  sizeMode?: "fit" | "fill";
 }
 
 const STEP = 5;
@@ -17,7 +20,7 @@ const STEP = 5;
 // a pointer: it's a native role="slider" (arrow keys / Home / End), and the
 // Original/Split/Vector buttons below give a no-drag way to reach every
 // state the handle can — see accessibility notes in the phase brief.
-export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width, height, background }: CompareSliderProps) {
+export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width, height, background, sizeMode = "fit" }: CompareSliderProps) {
   const [position, setPosition] = useState(50);
   const frameRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -85,16 +88,21 @@ export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width,
     <div className="compare-slider">
       <div
         ref={frameRef}
-        className={`compare-slider__frame${background ? ` preview-bg preview-bg--${background}` : ""}`}
+        className={`compare-slider__frame${background ? ` preview-bg preview-bg--${background}` : ""}${sizeMode === "fill" ? " compare-slider__frame--fill" : ""}`}
         // max-height alone (with width: 100%) can't shrink the box
         // proportionally — it just clips it, letterboxing the image
         // off-center. Deriving max-width from the same height budget via
         // this image's own ratio keeps both dimensions in proportion so
-        // margin-inline: auto can center the whole frame instead.
-        style={{
-          aspectRatio: `${width} / ${height}`,
-          maxWidth: `calc(var(--compare-max-h, min(70vh, 640px)) * ${width / height})`,
-        }}
+        // margin-inline: auto can center the whole frame instead. In "fill"
+        // mode the parent stage owns the sizing (zoom), so no cap applies.
+        style={
+          sizeMode === "fill"
+            ? { aspectRatio: `${width} / ${height}` }
+            : {
+                aspectRatio: `${width} / ${height}`,
+                maxWidth: `calc(var(--compare-max-h, min(70vh, 640px)) * ${width / height})`,
+              }
+        }
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopDragging}

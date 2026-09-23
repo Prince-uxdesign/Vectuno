@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { dataTransferHasFiles, getFilesFromClipboard } from "../lib/input/clipboard";
+import { dataTransferHasFiles, getFilesFromClipboard } from "../lib/input/paste";
 
 export type IntakeSource = "paste" | "drop";
 

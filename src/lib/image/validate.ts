@@ -55,7 +55,7 @@ export function validateFile(file: File): void {
   if (file.size > MAX_FILE_BYTES) {
     throw new AppError(
       "FILE_TOO_LARGE",
-      `That image is too large (max ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)}MB).`,
+      `This image is too large to process in your browser (max ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)}MB).`,
       "Try compressing it, exporting it smaller, or choosing another file."
     );
   }
@@ -72,14 +72,14 @@ export function validateDimensions(width: number, height: number): void {
   if (width > MAX_DECODED_DIMENSION || height > MAX_DECODED_DIMENSION) {
     throw new AppError(
       "DIMENSIONS_TOO_LARGE",
-      `That image is too large (max ${MAX_DECODED_DIMENSION}px per side).`,
+      `This image is too large to process in your browser (max ${MAX_DECODED_DIMENSION}px per side).`,
       "Try a smaller image, or resize it before uploading."
     );
   }
   if (width * height > MAX_DECODED_PIXELS) {
     throw new AppError(
       "DIMENSIONS_TOO_LARGE",
-      "That image is too large — it has too many pixels to process in your browser.",
+      "This image has too many pixels to process reliably in your browser.",
       "Try a smaller image, or resize it before uploading."
     );
   }

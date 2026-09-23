@@ -440,6 +440,11 @@ h3 {
   background: var(--surface);
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(242, 128, 93, 0.14);
+  /* Heavier border plus an inset dashed outline — a shape change as well as
+     a color change, so the state doesn't rely on color. */
+  border-width: 2px;
+  outline: 2px dashed var(--accent);
+  outline-offset: -12px;
 }
 
 .upload-zone--invalid {
@@ -898,12 +903,6 @@ h3 {
   font-weight: 600;
 }
 
-/* Selection is never color-only: the active segment also gets a checkmark
-   and goes bold, both visible to colorblind users and in forced-colors mode. */
-.segmented__check {
-  flex-shrink: 0;
-}
-
 /* ---------- Advanced disclosure ---------- */
 
 .advanced-disclosure {
@@ -1276,6 +1275,7 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  order: 20;
 }
 
 .result-screen__download {
@@ -1546,8 +1546,19 @@ h3 {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
-  touch-action: none;
+  /* Panning (essential once the stage is zoomed) starts anywhere except the
+     handle; the handle itself keeps touch-action: none below so a touch drag
+     from the 44px target moves the divider instead of scrolling. Mouse
+     dragging is unaffected either way. */
+  touch-action: pan-x pan-y;
   cursor: ew-resize;
+}
+
+/* Zoomed mode: the parent stage owns the sizing, so the viewport budget cap
+   must not apply — otherwise the frame would letterbox inside its own stage. */
+.compare-slider__frame--fill {
+  max-height: none;
+  margin-inline: 0;
 }
 
 
@@ -1619,6 +1630,7 @@ h3 {
   align-items: center;
   justify-content: center;
   cursor: ew-resize;
+  touch-action: none;
 }
 
 .compare-slider__toggle {
@@ -2048,14 +2060,6 @@ summary:focus-visible,
   display: none;
 }
 
-/* Active drag: a heavier border plus an inset dashed outline — a shape
-   change as well as a color change, so the state doesn't rely on color. */
-.upload-zone--active {
-  border-width: 2px;
-  outline: 2px dashed var(--accent);
-  outline-offset: -12px;
-}
-
 /* Touch devices: no drag-and-drop, no hover — make "Browse files" a real,
    prominent button-sized target instead of an underlined phrase. */
 @media (hover: none) and (pointer: coarse) {
@@ -2206,4 +2210,357 @@ summary:focus-visible,
   font-size: var(--text-xs);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* ---------- Result workspace (designer result experience) ---------- */
+
+/* Preview / SVG Code tabs. */
+.result-tabs {
+  align-self: center;
+  width: 100%;
+  max-width: 320px;
+}
+
+/* Mobile-first ordering: the main/sidebar wrappers dissolve (display:
+   contents) so every block shares one ordering context — comparison first,
+   then Download, then Zoom, then Technical details, then palette, then the
+   remaining actions. Desktop restores the two-column workspace (see the
+   1024px query, which resets these orders). */
+.result-screen__main,
+.result-screen__sidebar {
+  display: contents;
+}
+
+.result-screen__comparison,
+.result-code {
+  order: 10;
+  min-width: 0;
+}
+
+.result-screen__zoombar {
+  order: 30;
+  min-width: 0;
+}
+
+.result-screen__zoombar:empty {
+  display: none;
+}
+
+.result-screen__body > .app-error,
+.result-screen__sidebar > .app-error {
+  order: 65;
+}
+
+.result-screen__bg {
+  order: 31;
+  min-width: 0;
+}
+
+.result-screen__bg:empty {
+  display: none;
+}
+
+.result-screen__bg .bg-toggle {
+  margin-inline: auto;
+}
+
+/* Zoom toolbar: stepper (− / level / +) plus Fit–400% presets. */
+.zoom-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.zoom-controls__stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.zoom-controls__step {
+  min-width: 48px;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+}
+
+.zoom-controls__level {
+  min-width: 56px;
+  text-align: center;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.zoom-controls__presets {
+  flex: 1 1 auto;
+  min-width: min(100%, 280px);
+}
+
+.zoom-controls__note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* Zoom viewport: fixed zoom levels grow the stage inside a scrollable frame
+   (capped in height like the comparison), so the page layout never breaks. */
+.result-viewport {
+  overflow: auto;
+  max-width: 100%;
+  max-height: var(--compare-max-h, min(70vh, 640px));
+  border-radius: var(--radius-md);
+  overscroll-behavior: contain;
+}
+
+.result-viewport__stage {
+  width: 100%;
+  margin-inline: auto;
+}
+
+/* Technical details disclosure. */
+.result-details {
+  order: 40;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding-inline: var(--space-5);
+}
+
+.result-details__summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  list-style: none;
+  border-radius: var(--radius-sm);
+}
+
+.result-details__summary::-webkit-details-marker {
+  display: none;
+}
+
+.result-details__summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.result-details[open] .result-details__summary::before {
+  transform: rotate(45deg);
+}
+
+.result-details .result-metadata {
+  border: none;
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+/* Detected palette. */
+.result-palette {
+  order: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.result-palette__heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.result-palette__count {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.result-palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.result-palette__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 12px 4px 4px;
+  font-size: var(--text-xs);
+}
+
+.result-palette__swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border-firm);
+  flex-shrink: 0;
+}
+
+.result-palette__hex {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.result-palette__copy {
+  align-self: flex-start;
+  min-height: 44px;
+}
+
+/* Secondary actions: Open SVG + Figma handoff. Kept outside
+   .result-screen__actions so the primary/secondary download flow there stays
+   a single, unambiguous pair. */
+.result-screen__secondary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.result-screen__open {
+  width: 100%;
+}
+
+.figma-handoff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+}
+
+.figma-handoff__heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.figma-handoff__steps {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.figma-handoff__copy {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* SVG code viewer: scrollable, page-safe, with its own copy control. */
+.code-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.code-viewer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* The shared copy button is full-width inside the actions column; inline
+   here it sits beside the line count instead. */
+.code-viewer__meta .result-screen__copy {
+  width: auto;
+}
+
+/* ---------- QualityNotice (expectation-setting guidance, not an error) ---------- */
+
+.quality-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.quality-notice__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.quality-notice__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+/* ---------- ErrorState suggestions (quiet tertiary actions) ---------- */
+
+.error-state__actions .btn-ghost {
+  min-height: 44px;
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.code-viewer__pre {
+  margin: 0;
+  max-height: 480px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.code-viewer__pre:focus-visible {
+  outline: 3px solid var(--fg);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1024px) {
+  .result-screen__main,
+  .result-screen__sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    min-width: 0;
+  }
+
+  .result-screen__main > *,
+  .result-screen__sidebar > * {
+    order: initial;
+  }
+
+  .result-screen__bg .bg-toggle {
+    margin-inline: 0;
+    max-width: 360px;
+  }
 }
