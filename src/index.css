@@ -34,6 +34,9 @@
   --accent: var(--coral);
   --on-primary: var(--canvas);
 
+  /* Preview-only checkerboard tile (an SVG pattern, not a gradient). */
+  --checker-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='8' height='8' fill='%23e3ded7'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23e3ded7'/%3E%3C/svg%3E");
+
   --shadow-elevated: 0 6px 24px rgba(37, 37, 34, 0.06), 0 0 0 1px var(--border-firm);
 
   /* ---- Spacing scale (4px base) ---- */
@@ -768,34 +771,54 @@ h3 {
 
 /* ---------- FileMetadata ---------- */
 
+/* Secondary to the preview on purpose: one bold filename plus one quiet line
+   ("PNG · 1200 × 800 · 248 KB"), not a table competing with the image. */
 .file-metadata {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3) var(--space-5);
-  margin: 0;
-  width: 100%;
-}
-
-.file-metadata__row {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
+  width: 100%;
   min-width: 0;
+  text-align: center;
 }
 
-.file-metadata__row dt {
-  font-size: var(--text-2xs);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.file-metadata__row dd {
+.file-metadata__name {
   margin: 0;
+  max-width: 100%;
   font-size: var(--text-sm);
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.file-metadata__details {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.file-metadata__flag {
+  margin: var(--space-2) 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--fg);
+}
+
+/* Small checker swatch beside the words — the state is stated in text, the
+   swatch is only a cue. */
+.file-metadata__flag::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border-firm);
+  border-radius: 2px;
+  background-color: #fff;
+  background-image: var(--checker-image);
+  background-size: 8px 8px;
 }
 
 /* ---------- ConversionSettings ---------- */
@@ -1527,13 +1550,6 @@ h3 {
   cursor: ew-resize;
 }
 
-.compare-slider__frame--checkerboard {
-  background-image: linear-gradient(45deg, var(--border) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--border) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--border) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--border) 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-}
 
 .compare-slider__layer {
   position: absolute;
@@ -1941,4 +1957,139 @@ summary:focus-visible,
   font-weight: 600;
   padding: var(--space-3) var(--space-5);
   cursor: pointer;
+}
+
+/* ---------- Preview backgrounds (preview-only, never exported) ---------- */
+
+.preview-bg--checker {
+  background-color: #fff;
+  background-image: var(--checker-image);
+  background-size: 16px 16px;
+}
+
+.preview-bg--white {
+  background: #fff;
+}
+
+.preview-bg--black {
+  background: #000;
+}
+
+.bg-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 360px;
+  margin-inline: auto;
+}
+
+.result-screen__sidebar .bg-toggle {
+  max-width: none;
+}
+
+.bg-toggle__label,
+.bg-toggle__note {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.bg-toggle__note {
+  text-align: center;
+}
+
+/* ---------- Upload zone: guidance, touch, notice ---------- */
+
+.upload-zone__guidance {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.upload-zone__how,
+.upload-zone__best,
+.upload-zone__notice {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.upload-zone__best {
+  color: var(--fg);
+}
+
+.upload-zone__notice {
+  margin-top: var(--space-2);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.upload-zone__kbd {
+  display: inline-block;
+  margin-left: var(--space-1);
+  padding: 1px 6px;
+  border: 1px solid var(--border-firm);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+}
+
+.upload-zone__label--touch,
+.upload-zone__browse-btn,
+.upload-zone__how-touch {
+  display: none;
+}
+
+/* Active drag: a heavier border plus an inset dashed outline — a shape
+   change as well as a color change, so the state doesn't rely on color. */
+.upload-zone--active {
+  border-width: 2px;
+  outline: 2px dashed var(--accent);
+  outline-offset: -12px;
+}
+
+/* Touch devices: no drag-and-drop, no hover — make "Browse files" a real,
+   prominent button-sized target instead of an underlined phrase. */
+@media (hover: none) and (pointer: coarse) {
+  .upload-zone__label--pointer,
+  .upload-zone__sub--pointer,
+  .upload-zone__how-pointer {
+    display: none;
+  }
+
+  .upload-zone__label--touch {
+    display: block;
+  }
+
+  .upload-zone__how-touch {
+    display: inline;
+  }
+
+  .upload-zone__browse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    min-width: 180px;
+    margin-top: var(--space-2);
+    padding: 0 var(--space-6);
+    border-radius: var(--radius-pill);
+    background: var(--fg);
+    color: var(--on-primary);
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+
+  .upload-zone__button {
+    min-height: 0;
+    padding-block: var(--space-6);
+  }
 }

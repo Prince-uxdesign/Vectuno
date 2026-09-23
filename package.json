@@ -12,6 +12,7 @@
     "test:benchmark": "node scripts/benchmark-vectorizers.mjs",
     "test:settings": "node scripts/benchmark-settings.mjs",
     "test:e2e": "node scripts/e2e-full.mjs",
+    "test:e2e-input": "node scripts/e2e-input.mjs",
     "test:e2e-batch": "node scripts/e2e-batch.mjs",
     "test:e2e-stress": "node scripts/e2e-stress.mjs",
     "test:visual": "node scripts/visual-probe.mjs",
