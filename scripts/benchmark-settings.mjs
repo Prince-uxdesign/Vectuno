@@ -20,7 +20,7 @@ function countPaths(svg) {
 
 const BASE = {
   numberofcolors: 20, // mirrors DEFAULT_OPTIONS in src/types/index.ts
-  colorquantcycles: 3,
+  colorquantcycles: 5, // mirrors FIXED in src/lib/engine/presets.ts
   blurradius: 0,
   blurdelta: 20,
   rightangleenhance: true,
@@ -29,9 +29,9 @@ const BASE = {
 };
 
 const DETAIL = {
-  low: { pathomit: 30 },
-  medium: { pathomit: 8 },
-  high: { pathomit: 1 },
+  low: { pathomit: 40 }, // mirrors DETAIL_PATHOMIT in src/lib/engine/presets.ts
+  medium: { pathomit: 16 },
+  high: { pathomit: 4 },
 };
 const SMOOTHNESS = {
   low: { ltres: 0.2, qtres: 0.2 },

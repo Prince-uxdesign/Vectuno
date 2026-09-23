@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { BatchItem } from "../state/useBatchConverter";
 import { MAX_BATCH_FILES } from "../state/useBatchConverter";
-import type { ConversionOptions } from "../types";
+import { ACCEPT_ATTRIBUTE, type ConversionOptions } from "../types";
 import { ConversionSettings } from "./ConversionSettings";
 import { Button } from "./ui/Button";
 import { formatBytes } from "../lib/utils/format";
 import { deriveExportFilename } from "../lib/utils/filename";
-import { triggerBlobDownload } from "../lib/utils/download";
+import { downloadSvg, triggerBlobDownload } from "../lib/utils/download";
 import { createZipBlob } from "../lib/utils/zip";
 
 interface BatchWorkspaceProps {
@@ -36,9 +36,7 @@ function ItemDownloadButton({ item }: { item: BatchItem }) {
     <button
       type="button"
       className="batch-list__download"
-      onClick={() =>
-        triggerBlobDownload(new Blob([item.result!.svg], { type: "image/svg+xml" }), deriveExportFilename(item.file.name, "svg"))
-      }
+      onClick={() => downloadSvg(item.result!.svg, deriveExportFilename(item.file.name, "svg"))}
     >
       Download
     </button>
@@ -143,7 +141,7 @@ export function BatchWorkspace({
             <input
               ref={addInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+              accept={ACCEPT_ATTRIBUTE}
               multiple
               className="upload-zone__input"
               aria-hidden="true"

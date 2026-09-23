@@ -1,5 +1,10 @@
 import type { CSSProperties } from "react";
 
+// public/ assets are served at BASE_URL, not always "/" — a literal
+// "/showcase/..." string would 404 under a subpath deploy (e.g. GitHub
+// Pages project sites).
+const SHOWCASE_BASE_URL = `${import.meta.env.BASE_URL}showcase/`;
+
 interface ShowcaseImage {
   file: string;
   alt: string;
@@ -51,11 +56,14 @@ export function ImageShowcase() {
           >
             <img
               className="showcase__image"
-              src={`/showcase/${img.file}.webp`}
-              srcSet={`/showcase/${img.file}.webp 480w, /showcase/${img.file}@2x.webp 960w`}
+              src={`${SHOWCASE_BASE_URL}${img.file}.webp`}
+              srcSet={`${SHOWCASE_BASE_URL}${img.file}.webp 480w, ${SHOWCASE_BASE_URL}${img.file}@2x.webp 960w`}
               sizes="(max-width: 767px) 40vw, (max-width: 1023px) 160px, 200px"
               alt={img.alt}
+              width={480}
+              height={480}
               loading={i < 3 ? "eager" : "lazy"}
+              fetchPriority={i < 3 ? "high" : undefined}
               decoding="async"
             />
           </li>

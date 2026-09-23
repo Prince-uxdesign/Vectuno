@@ -1,10 +1,6 @@
-interface LogoProps {
-  className?: string;
-}
-
-export function Logo({ className = "" }: LogoProps) {
+export function Logo() {
   return (
-    <span className={`logo ${className}`.trim()}>
+    <span className="logo">
       <span className="logo__mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path

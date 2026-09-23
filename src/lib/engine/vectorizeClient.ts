@@ -52,13 +52,23 @@ export function vectorize(
       cleanup();
       const msg = event.data;
       if (msg.ok) {
-        const svg = optimizeSvg(msg.svg);
-        resolve({
-          svg,
-          sizeBytes: new Blob([svg]).size,
-          pathCount: (svg.match(/<path /g) ?? []).length,
-          elapsedMs: msg.elapsedMs,
-        });
+        try {
+          const svg = optimizeSvg(msg.svg);
+          resolve({
+            svg,
+            sizeBytes: new Blob([svg]).size,
+            pathCount: (svg.match(/<path[\s/>]/g) ?? []).length,
+            elapsedMs: msg.elapsedMs,
+          });
+        } catch {
+          reject(
+            new AppError(
+              "VECTORIZE_FAILED",
+              "We couldn't finish preparing this image.",
+              "Try again, or choose a different image."
+            )
+          );
+        }
       } else {
         reject(
           new AppError(
@@ -81,13 +91,27 @@ export function vectorize(
       );
     };
 
+    // Fires if the worker posts something structured-clone can't
+    // deserialize back on this side — onmessage never runs in that case, so
+    // without this the caller would just sit until the 30s timeout.
+    worker.onmessageerror = () => {
+      cleanup();
+      reject(
+        new AppError(
+          "BROWSER_UNSUPPORTED",
+          "Your browser couldn't read the conversion result.",
+          "Try a recent version of Chrome, Firefox, Safari, or Edge."
+        )
+      );
+    };
+
     const request: VectorizeRequest = {
       imageData: {
         width: decoded.imageData.width,
         height: decoded.imageData.height,
         data: decoded.imageData.data,
       },
-      options: buildImageTracerOptions(options),
+      options: buildImageTracerOptions(options, decoded.imageData),
     };
     worker.postMessage(request);
   });

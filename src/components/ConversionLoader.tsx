@@ -1,5 +1,6 @@
 import { useRotatingFact } from "../state/useRotatingFact";
 import { Button } from "./ui/Button";
+import { CheckmarkIcon } from "./icons/CheckmarkIcon";
 
 interface ConversionLoaderProps {
   previewUrl: string | null;
@@ -36,16 +37,7 @@ export function ConversionLoader({ previewUrl, onCancel }: ConversionLoaderProps
       <div className="conversion-loader__stages" aria-hidden="true">
         <span className="conversion-loader__stage conversion-loader__stage--done">
           <span className="conversion-loader__stage-dot">
-            <svg viewBox="0 0 16 16" width="10" height="10">
-              <path
-                d="M3.5 8.5L6.5 11.5L12.5 4.5"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </svg>
+            <CheckmarkIcon size={10} />
           </span>
           Preparing
         </span>

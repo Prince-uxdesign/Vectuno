@@ -17,6 +17,9 @@ import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
 import { useBatchConverter } from "./state/useBatchConverter";
 
+const FALLBACK_ERROR_MESSAGE = "Something unexpected happened.";
+const FALLBACK_ERROR_HINT = "Try again, or choose a different image.";
+
 function App() {
   const { state, loadFile, setOptions, convert, cancel, reset, setDragActive } = useConverter();
   const batch = useBatchConverter();
@@ -24,6 +27,12 @@ function App() {
   const uploadZoneRef = useRef<HTMLButtonElement>(null);
   const workspaceHeadingRef = useRef<HTMLHeadingElement>(null);
   const convertingHeadingRef = useRef<HTMLHeadingElement>(null);
+  // Set when a nav click needs a reset first (workspace/converting/result/
+  // batch screens unmount the landing sections a scroll target lives in).
+  // Consumed by the landing-transition effect below, once the target
+  // sections are actually back in the DOM, instead of guessing with a bare
+  // requestAnimationFrame after reset().
+  const pendingScrollRef = useRef<{ id: string; focusUpload: boolean } | null>(null);
 
   const isBatchActive = batch.state.items.length > 0;
   const isLanding = !isBatchActive && (state.stage === "empty" || state.stage === "dragActive");
@@ -74,16 +83,37 @@ function App() {
   // - back to landing (workspace/result/batch gone) -> return to the upload button
   // Success, error, and batch screens focus themselves (see ResultPreview/
   // ErrorState/BatchWorkspace), so this effect only tracks landing<->workspace.
+  const performScroll = useCallback((id: string, focusUpload: boolean) => {
+    requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (id === "top") {
+        window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+      } else {
+        document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+      }
+      if (focusUpload) uploadZoneRef.current?.focus();
+    });
+  }, []);
+
   const prevLandingRef = useRef(isLanding);
   useEffect(() => {
     const wasLanding = prevLandingRef.current;
     prevLandingRef.current = isLanding;
     if (!wasLanding && isLanding) {
-      requestAnimationFrame(() => uploadZoneRef.current?.focus());
+      // Effect runs after the landing sections have committed to the DOM,
+      // so a pending nav target (see handleNavigate/scrollToUpload) is safe
+      // to scroll/focus now — no race with reset()'s async re-render.
+      const pending = pendingScrollRef.current;
+      pendingScrollRef.current = null;
+      if (pending) {
+        performScroll(pending.id, pending.focusUpload);
+      } else {
+        requestAnimationFrame(() => uploadZoneRef.current?.focus());
+      }
     } else if (wasLanding && showWorkspace) {
       requestAnimationFrame(() => workspaceHeadingRef.current?.focus());
     }
-  }, [isLanding, showWorkspace]);
+  }, [isLanding, showWorkspace, performScroll]);
 
   // Same reasoning as above for the ready <-> converting transition: each
   // swaps out the control that had focus (Convert button <-> Cancel
@@ -106,20 +136,30 @@ function App() {
 
   const scrollToUpload = useCallback(() => {
     if (!isLanding) {
+      pendingScrollRef.current = { id: "converter", focusUpload: true };
       reset();
       handleBatchReset();
+      return;
     }
-    // Wait a frame so the upload zone is back in the DOM after a reset.
-    requestAnimationFrame(() => {
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      uploadZoneRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
-      uploadZoneRef.current?.focus();
-    });
-  }, [isLanding, reset, handleBatchReset]);
+    performScroll("converter", true);
+  }, [isLanding, reset, handleBatchReset, performScroll]);
+
+  const handleNavigate = useCallback(
+    (id: string) => {
+      if (!isLanding) {
+        pendingScrollRef.current = { id, focusUpload: false };
+        reset();
+        handleBatchReset();
+        return;
+      }
+      performScroll(id, false);
+    },
+    [isLanding, reset, handleBatchReset, performScroll]
+  );
 
   return (
-    <div className="app-shell">
-      <Navigation onStartConverting={scrollToUpload} />
+    <div className="app-shell" id="top">
+      <Navigation onStartConverting={scrollToUpload} onNavigateToSection={handleNavigate} />
 
       <main className="app-main">
         {isLanding && (
@@ -194,8 +234,8 @@ function App() {
                 <div className="workspace__panel">
                   {isRetryableError ? (
                     <ErrorState
-                      message={state.errorMessage ?? "Something unexpected happened."}
-                      hint={state.errorHint ?? "Try again, or choose a different image."}
+                      message={state.errorMessage ?? FALLBACK_ERROR_MESSAGE}
+                      hint={state.errorHint ?? FALLBACK_ERROR_HINT}
                       recovery="retry"
                       onRetry={convert}
                       onChooseNew={reset}
@@ -204,7 +244,11 @@ function App() {
                     <ConversionStatus stage={state.stage} onConvert={convert} />
                   )}
 
-                  <ConversionSettings options={state.options} onChange={setOptions} disabled={false} />
+                  <ConversionSettings
+                    options={state.options}
+                    onChange={setOptions}
+                    disabled={state.stage === "preparing"}
+                  />
                 </div>
               </div>
             </Container>
@@ -240,8 +284,8 @@ function App() {
           <Section compact>
             <Container>
               <ErrorState
-                message={state.errorMessage ?? "Something unexpected happened."}
-                hint={state.errorHint ?? "Try again, or choose a different image."}
+                message={state.errorMessage ?? FALLBACK_ERROR_MESSAGE}
+                hint={state.errorHint ?? FALLBACK_ERROR_HINT}
                 recovery={state.errorRecovery ?? "chooseNew"}
                 onRetry={convert}
                 onChooseNew={reset}
@@ -298,7 +342,7 @@ function App() {
         )}
       </main>
 
-      <Footer />
+      <Footer onNavigateToSection={handleNavigate} />
     </div>
   );
 }

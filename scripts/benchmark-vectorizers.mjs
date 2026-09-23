@@ -15,7 +15,7 @@ const OUT = path.join(ROOT, "test/output");
 mkdirSync(OUT, { recursive: true });
 
 function countPaths(svg) {
-  return (svg.match(/<path /g) || []).length;
+  return (svg.match(/<path[\s/>]/g) || []).length;
 }
 
 async function loadRGBA(filePath) {
@@ -36,7 +36,7 @@ function runImageTracerFromPixels(data, width, height, options) {
 const IMAGETRACER_DEFAULT = {}; // library defaults
 
 async function main() {
-  const files = readdirSync(FIXTURES).filter((f) => /\.(png|jpe?g)$/i.test(f));
+  const files = readdirSync(FIXTURES).filter((f) => /\.(png|jpe?g|webp)$/i.test(f));
   const results = [];
 
   for (const file of files) {
@@ -54,7 +54,7 @@ async function main() {
     try {
       const { data, width, height } = await loadRGBA(filePath);
       const { svg, ms } = runImageTracerFromPixels(data, width, height, IMAGETRACER_DEFAULT);
-      writeFileSync(path.join(OUT, `imagetracer-${file.replace(/\.(jpe?g|png)$/i, "")}.svg`), svg);
+      writeFileSync(path.join(OUT, `imagetracer-${file.replace(/\.(jpe?g|png|webp)$/i, "")}.svg`), svg);
       row.imagetracer = {
         ms: ms.toFixed(0),
         kb: (Buffer.byteLength(svg) / 1024).toFixed(1),

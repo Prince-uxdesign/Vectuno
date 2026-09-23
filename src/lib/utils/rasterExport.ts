@@ -3,14 +3,26 @@
 // resolution is enough for a crisp export without ballooning past this.
 const MAX_EXPORT_DIMENSION = 4096;
 const EXPORT_SCALE = 2;
+const IMAGE_LOAD_TIMEOUT_MS = 10_000;
 
 export type RasterFormat = "png" | "jpeg";
 
 function loadSvgImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Failed to load SVG for raster export"));
+    const timeout = setTimeout(() => {
+      image.onload = null;
+      image.onerror = null;
+      reject(new Error("Timed out loading SVG for raster export"));
+    }, IMAGE_LOAD_TIMEOUT_MS);
+    image.onload = () => {
+      clearTimeout(timeout);
+      resolve(image);
+    };
+    image.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error("Failed to load SVG for raster export"));
+    };
     image.src = url;
   });
 }

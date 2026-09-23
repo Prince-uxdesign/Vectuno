@@ -5,7 +5,7 @@ import { vectorize } from "../lib/engine/vectorizeClient";
 import {
   AppError,
   ConversionCancelled,
-  DEFAULT_OPTIONS,
+  createDefaultOptions,
   type ConversionOptions,
   type ConversionResult,
 } from "../types";
@@ -44,7 +44,7 @@ const initialState: BatchState = {
   items: [],
   isProcessing: false,
   isComplete: false,
-  options: DEFAULT_OPTIONS,
+  options: createDefaultOptions(),
 };
 
 function mapItem(state: BatchState, id: string, update: Partial<BatchItem>): BatchState {
@@ -60,13 +60,13 @@ function reducer(state: BatchState, action: Action): BatchState {
     case "START":
       return { ...state, isProcessing: true, isComplete: false };
     case "ITEM_CONVERTING":
-      return mapItem(state, action.id, { status: "converting" });
+      return mapItem(state, action.id, { status: "converting", errorMessage: null });
     case "ITEM_DONE":
       return mapItem(state, action.id, { status: "done", result: action.result, errorMessage: null });
     case "ITEM_ERROR":
       return mapItem(state, action.id, { status: "error", errorMessage: action.message });
     case "ITEM_RESET_QUEUED":
-      return mapItem(state, action.id, { status: "queued" });
+      return mapItem(state, action.id, { status: "queued", errorMessage: null, result: null });
     case "FINISH":
       return { ...state, isProcessing: false, isComplete: true };
     // A cancelled run is not "complete" — untouched queued items should stay
@@ -77,7 +77,9 @@ function reducer(state: BatchState, action: Action): BatchState {
     case "SET_OPTIONS":
       return { ...state, options: { ...state.options, ...action.options } };
     case "RESET":
-      return initialState;
+      // Preserve user options like single-file RESET does — resetting the
+      // queue shouldn't wipe conversion settings.
+      return { ...initialState, options: state.options };
     default:
       return state;
   }
@@ -100,6 +102,10 @@ export function useBatchConverter() {
   const stateRef = useRef(state);
   const abortControllerRef = useRef<AbortController | null>(null);
   const cancelledRef = useRef(false);
+  // Synchronous guard against double start() (double-click/Enter before the
+  // START re-render syncs stateRef via effect). Mirrors single-file's
+  // abortControllerRef guard in useConverter.
+  const isStartingRef = useRef(false);
 
   // Synced in an effect (not during render) so callbacks always read the
   // latest state without needing every action creator in their dependency
@@ -139,10 +145,14 @@ export function useBatchConverter() {
   // trace. One at a time keeps memory bounded to a single image regardless of
   // batch size.
   const start = useCallback(async () => {
-    if (stateRef.current.isProcessing) return;
+    if (stateRef.current.isProcessing || isStartingRef.current) return;
+    isStartingRef.current = true;
     cancelledRef.current = false;
     dispatch({ type: "START" });
 
+    // Snapshot options at START so mid-batch changes can't produce a
+    // heterogeneous batch.
+    const batchOptions = stateRef.current.options;
     const queue = stateRef.current.items.filter((item) => item.status === "queued" || item.status === "error");
     let wasCancelled = false;
 
@@ -152,6 +162,8 @@ export function useBatchConverter() {
         break;
       }
       dispatch({ type: "ITEM_CONVERTING", id: item.id });
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
       try {
         validateFile(item.file);
         const decoded = await decodeImage(item.file);
@@ -160,9 +172,7 @@ export function useBatchConverter() {
           wasCancelled = true;
           break;
         }
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
-        const result = await vectorize(decoded, stateRef.current.options, controller.signal);
+        const result = await vectorize(decoded, batchOptions, controller.signal);
         dispatch({ type: "ITEM_DONE", id: item.id, result });
       } catch (err) {
         if (err instanceof ConversionCancelled) {
@@ -173,13 +183,16 @@ export function useBatchConverter() {
         const appError =
           err instanceof AppError
             ? err
-            : new AppError("UNKNOWN", "Something unexpected happened while converting this image.", "");
+            : new AppError("UNKNOWN", "Something unexpected happened while converting this image.", "Try again, or remove this file and re-add it.");
         dispatch({ type: "ITEM_ERROR", id: item.id, message: appError.message });
       } finally {
-        abortControllerRef.current = null;
+        // Only clear if still ours — a reset()+start() may have installed a
+        // newer live controller that must survive.
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
       }
     }
 
+    isStartingRef.current = false;
     dispatch({ type: wasCancelled ? "CANCEL_FINISH" : "FINISH" });
   }, []);
 

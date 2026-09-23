@@ -87,8 +87,12 @@ Worker on top (see below).
 6. **Monochrome tracing?** Yes, by forcing `numberofcolors: 2`.
 7. **Detail control?** Yes — `ltres`/`qtres`/`pathomit` (wrapped as a `detail`
    preset: low/medium/high).
-8. **Smoothing/path simplification?** Yes — `blurradius` (pre-blur) +
-   `roundcoords` (coordinate precision), wrapped as a single `smoothing` slider.
+8. **Smoothing/path simplification?** Yes — at this point in testing, planned
+   as `blurradius` (pre-blur) + `roundcoords` (coordinate precision) wrapped
+   as a single `smoothing` slider. **Superseded** — the shipped mapping uses
+   `ltres`/`qtres` instead; `blurradius` was tested and rejected (see
+   "Detail and Smoothness were deliberately re-derived" in the README's
+   Conversion settings section for why).
 9. **Background removal/preservation?** Alpha is preserved per-path via the
    `opacity` attribute (verified in output SVG source); there's no dedicated
    "remove background" feature — out of scope for Phase 1.
@@ -115,14 +119,19 @@ paths / 160KB**, vs. 137 paths / 20KB for the lossless PNG original of the
 same artwork. Compression noise gets traced as real detail. Worth surfacing
 to users later ("for best results, use a lossless source when possible").
 
-## Known limitations (current MVP)
+## Known limitations (Phase 1 snapshot — historical)
+
+The engine-level findings below (photographs, gradients, no SVGO pass) are
+still accurate; the design/process framing is not — see the note after this
+list.
 
 - Photographs are a poor fit (see above) — no warning is shown yet; Phase 2
   should detect/discourage this or clearly set expectations.
 - Gradients are posterized into flat color bands, not reproduced as SVG
   gradients — expected and inherent to how imagetracerjs quantizes color.
 - No SVG post-optimization pass (e.g. SVGO) yet — output is `imagetracerjs`'s
-  raw SVG. Deferred; not needed to prove the pipeline works.
+  raw SVG, aside from the conservative dead-attribute cleanup in
+  `optimizeSvg.ts` added later. Deferred; not needed to prove the pipeline works.
 - No progress indicator during conversion (library has no progress hook).
 - No background-removal feature.
 
@@ -136,13 +145,19 @@ to users later ("for best results, use a lossless source when possible").
 - imagetracerjs was last published in 2022. It's algorithmically simple and
   dependency-free, which lowers risk, but it won't receive upstream fixes.
 
-## Next implementation recommendation
+## Next implementation recommendation (historical — superseded)
 
 Phase 1 is done: pipeline proven end-to-end (upload → decode → convert →
 preview → download) with real browser tests, not just unit-level checks. The
 concrete next step is Phase 2 polish: apply the black/white editorial design
 direction to the existing shell, add a photograph-detection warning, and
 consider an SVG-optimization pass (SVGO) before download.
+
+**This recommendation is stale**: the design direction that actually shipped
+is the warm, Strawberry-inspired palette described in the README's "Design
+system" section, not black/white editorial. The photograph-detection warning
+and an SVGO-style pass are both still outstanding — see the README's "Known
+limitations" for their current status.
 
 ## Phase 2: fidelity investigation (color-merging bug)
 
@@ -304,16 +319,14 @@ noise" — it traces every one of those deviations as a real shape boundary,
 because to the algorithm a 1-pixel color difference is indistinguishable
 from an intentional 1-pixel design detail.
 
-### Fix
+### Fix (superseded — see Fidelity pass below)
 
-A small blur applied to the decoded pixels **before** color quantization
-and tracing — implemented via the Canvas 2D `filter: blur(2px)` during the
-existing `drawImage` call in `decode.ts` (no new dependency). Critically,
-this is a different mechanism than `imagetracerjs`'s own `blurradius`
-option (already tested and rejected in Phase 2 — its "selective" blur
-increases path count on this exact class of image). A true pre-quantization
-blur removes the noise before the tracer ever sees it, instead of trying to
-filter shapes out afterward.
+> A canvas `blur(2px)` was previously applied here. It was removed after a
+> fidelity pass showed it bleeds high-contrast flat-art edges (black on
+> yellow) into dull intermediate bands that quantize as extra washed-out
+> colors. Speckle is now handled by adaptive palette sizing
+> (`estimatePaletteSize` in `presets.ts`), higher `pathomit` (40/16/4), and a
+> deterministic tiny-path strip in `optimizeSvg.ts` — no pixel blur.
 
 **Scoped strictly to `file.type === "image/jpeg"`.** This is not a
 cosmetic choice — tested directly: the same blur, applied to clean
