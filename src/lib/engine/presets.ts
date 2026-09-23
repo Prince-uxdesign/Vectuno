@@ -50,6 +50,22 @@ const SMOOTHNESS_TRES: Record<ConversionOptions["smoothness"], number> = {
 // worse. roundcoords (coordinate decimal precision) has no visible effect on
 // shape and is fixed rather than exposed, per "don't add a setting that
 // can't meaningfully influence output."
+// colorsampling (palette seeding strategy) and mincolorratio (palette-slot
+// reseeding threshold) are deliberately left at imagetracerjs's own defaults
+// (2 and 0) rather than exposed or changed, after testing the alternatives:
+//   - colorsampling: 1 (samplepalette — random pixel picks) and 0
+//     (generatepalette — RGB-cube + random padding) both call Math.random()
+//     internally with no seed, so the *same image converted twice* can
+//     produce a visibly different SVG. Confirmed via 5 repeated runs each
+//     (scripts/_tmp-color-sweep2.mjs): worst-of-5 pixel error on some
+//     fixtures was 3-15x the median. Not acceptable for a tool people expect
+//     to be repeatable. colorsampling: 2 (samplepalette2, the default) is a
+//     fixed spatial grid — no randomness anywhere in this pipeline.
+//   - mincolorratio > 0 (reseed palette slots below a pixel-count threshold)
+//     also reseeds via Math.random(), and empirically discarded real minor
+//     brand colors on flat art in testing (see DEFAULT_OPTIONS.numberOfColors
+//     comment in types/index.ts for the fix that actually addressed the
+//     color-merging bug this was tried against).
 const FIXED = {
   blurradius: 0,
   blurdelta: 20,

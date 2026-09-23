@@ -26,9 +26,22 @@ export interface ConversionOptions {
   smoothness: Level;
 }
 
+// numberOfColors default is 20, not a round 16, for a specific engine reason:
+// imagetracerjs's default palette seeding (colorsampling: 2) samples colors
+// from a sqrt(n)-by-sqrt(n) spatial grid over the image, not from its actual
+// color distribution. 16 produces an exact 4x4 grid; on artwork with several
+// small/thin same-size color regions (e.g. a multi-petal flower, dense thin
+// line art), that grid systematically lands most of its 16 sample points on
+// the dominant background and misses distinct smaller regions entirely — they
+// get absorbed into the nearest sampled color instead of getting their own
+// palette slot, which reads as "colors merging into each other." 20 forces a
+// 5x4 grid: finer sampling, verified (scripts/_tmp-numcolors-sweep*.mjs, see
+// docs/vectorization-evaluation.md Phase 2) to fix that merging on affected
+// fixtures (pixel-error dropped ~65-99% on the two affected test images)
+// while being neutral-to-positive on logos/flat art that weren't affected.
 export const DEFAULT_OPTIONS: ConversionOptions = {
   colorMode: "color",
-  numberOfColors: 16,
+  numberOfColors: 20,
   detail: "medium",
   smoothness: "medium",
 };

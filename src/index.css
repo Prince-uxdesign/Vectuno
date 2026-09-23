@@ -1,19 +1,43 @@
 :root {
-  /* ---- Color: strict black/white + a 4-step neutral gray scale ---- */
-  --black: #0a0a0a;
-  --white: #ffffff;
-  --gray-100: #f5f5f4; /* very light gray — surfaces */
-  --gray-300: #e2e0dd; /* light gray — borders, dividers */
-  --gray-500: #615c57; /* medium gray — secondary text (darkened to 4.6:1 on white) */
-  --gray-700: #4a4744; /* dark gray — headings on light surfaces, hover states */
-  --error: #b00020;
+  /* ---- Color: warm off-white system — Strawberry-inspired, adapted to
+     Vectuno. Ink instead of pure black, cream instead of pure white, coral
+     reserved as a punctuation accent rather than a UI-wide color. ---- */
+  --ink: #252522;
+  --canvas: #fffcfa;
+  --surface-white: #fffefe;
+  --cream: #f7f2ed;
+  --border-soft: #efe6dc;
+  --border-firm: #e6dbd1;
+  /* Strawberry's literal muted (#858481) only reaches ~3.7:1 on --canvas,
+     and muted text also sits on the slightly darker --surface (cream)
+     cards throughout (How It Works descriptions, settings labels) — a
+     first darkening pass (#75736c) cleared canvas at 4.65:1 but still
+     failed on cream at 4.27:1 (caught by an automated contrast audit
+     across every screen). Darkened again to clear the darker of the two
+     backgrounds: ~4.9:1 on cream, ~5.4:1 on canvas (verified). */
+  --muted-warm: #6b6964;
+  --coral: #f2805d;
+  --coral-hover: #e97452;
+  --coral-pressed: #d96544;
+  /* Strawberry's literal error red (#EF4343) only reaches ~3.7:1 on this
+     canvas at the sizes error-state__message actually renders at (15px,
+     weight 600 — under the "large text" AA exemption). Darkened to a warm
+     brick-red at ~5.1:1 (verified), same reasoning as --muted-warm above. */
+  --error: #c6372e;
+  --success: #22c55e;
 
-  --bg: var(--white);
-  --fg: var(--black);
-  --muted: var(--gray-500);
-  --border: var(--gray-300);
-  --border-strong: var(--black);
-  --surface: var(--gray-100);
+  --bg: var(--canvas);
+  --fg: var(--ink);
+  --muted: var(--muted-warm);
+  --border: var(--border-soft);
+  --border-strong: var(--border-firm);
+  --surface: var(--cream);
+  --surface-elevated: var(--surface-white);
+  --accent: var(--coral);
+  --on-primary: var(--canvas);
+
+  --shadow-elevated: 0 6px 24px rgba(37, 37, 34, 0.06), 0 0 0 1px var(--border-firm);
+  --shadow-soft: 0 1px 3px rgba(37, 37, 34, 0.1);
 
   /* ---- Spacing scale (4px base) ---- */
   --space-1: 4px;
@@ -26,10 +50,12 @@
   --space-8: 64px;
   --space-9: 96px;
 
-  /* ---- Radii: restrained, editorial, never pill-shaped ---- */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* ---- Radii: soft and rounded — cards read as warm blocks, actions read
+     as pills. Never sharp-cornered. ---- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
 
   /* ---- Type scale: consolidated from what was previously ~11 near-duplicate
      sizes (0.7/0.75/0.8/0.85/0.875/0.9/0.95/1/1.05rem used near-interchangeably
@@ -50,7 +76,8 @@
   --duration-fast: 120ms;
   --duration-base: 200ms;
 
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font: 16px/1.5 var(--font-sans);
   color-scheme: light;
 }
 
@@ -104,6 +131,16 @@ button {
   cursor: pointer;
 }
 
+/* Medium-light heading weight by default — browsers default h1-h3 to bold
+   (700), which reads heavy against this warm, soft system. Individual
+   heading classes below still set their own size/tracking. */
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
 .app-shell {
   min-height: 100vh;
   display: flex;
@@ -155,7 +192,7 @@ button {
 
 .logo__mark {
   display: inline-flex;
-  color: var(--fg);
+  color: var(--accent);
 }
 
 .logo__word {
@@ -200,16 +237,35 @@ button {
 }
 
 .site-nav__link {
-  color: var(--fg);
+  position: relative;
+  color: var(--muted);
   text-decoration: none;
   font-size: var(--text-sm);
   padding: var(--space-3) 0;
-  border-bottom: 1px solid transparent;
-  transition: border-color var(--duration-fast) var(--ease);
 }
 
 .site-nav__link:hover {
-  border-bottom-color: var(--fg);
+  color: var(--fg);
+}
+
+/* Signature Strawberry touch: a tiny coral diamond marks the active/hovered
+   link instead of an underline — a quiet brand signal, not a heavy state
+   change. */
+.site-nav__link::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  transform: translateX(-50%) rotate(45deg) scale(0);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.site-nav__link:hover::after,
+.site-nav__link:focus-visible::after {
+  transform: translateX(-50%) rotate(45deg) scale(1);
 }
 
 @media (min-width: 640px) {
@@ -232,8 +288,9 @@ button {
 
 .hero__heading {
   font-size: var(--text-display);
+  font-weight: 600;
   line-height: 1.1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
   margin: 0 0 var(--space-4);
   text-wrap: balance;
 }
@@ -245,14 +302,119 @@ button {
   line-height: 1.5;
 }
 
+/* ---------- ImageShowcase ---------- */
+
+.showcase {
+  margin-top: var(--space-7);
+}
+
+.showcase__track {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-4);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: visible;
+  gap: var(--space-3);
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--space-4);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbar chrome without hiding the scroll affordance — the partial
+   edge cards already signal there's more to see. */
+.showcase__track {
+  scrollbar-width: none;
+}
+
+.showcase__track::-webkit-scrollbar {
+  display: none;
+}
+
+.showcase__card {
+  flex: none;
+  width: 132px;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  scroll-snap-align: center;
+  transition: transform var(--duration-base) var(--ease), box-shadow var(--duration-base) var(--ease);
+}
+
+.showcase__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Tablet: switch to a centered, gently overlapping fan at reduced intensity —
+   same composition concept as desktop, smaller scale and less overlap. */
+@media (min-width: 640px) {
+  .showcase {
+    /* The fan composition intentionally lets cards spill past the track's
+       own box (overflow: visible, so hover lift isn't clipped); clip at the
+       page level instead so the spill never causes horizontal scroll. */
+    overflow-x: clip;
+  }
+
+  .showcase__track {
+    justify-content: center;
+    overflow: visible;
+    padding: 0 var(--space-5);
+    gap: 0;
+  }
+
+  .showcase__card {
+    width: 148px;
+    margin-left: -28px;
+    z-index: var(--z);
+    transform: rotate(calc(var(--r) * 0.55)) translateY(calc(var(--ty) * 0.55));
+  }
+
+  .showcase__card:first-child {
+    margin-left: 0;
+  }
+
+  .showcase__card:hover {
+    transform: rotate(0deg) translateY(-6px) scale(1.04);
+    box-shadow: 0 12px 24px rgba(37, 37, 34, 0.1);
+    z-index: 10;
+  }
+}
+
+/* Desktop: full-intensity fan composition, closer to the reference layout. */
+@media (min-width: 1024px) {
+  .showcase__card {
+    width: 190px;
+    margin-left: -44px;
+    transform: rotate(var(--r)) translateY(var(--ty));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .showcase__card:hover {
+    transform: none;
+  }
+}
+
 /* ---------- UploadZone ---------- */
+/* Styled as a product surface (Strawberry's hero-input treatment) rather
+   than a plain form dropzone: elevated near-white card, soft shadow, warm
+   border — it should feel like the main interactive object on the page. */
 
 .upload-zone {
-  border: 1.5px dashed var(--border-strong);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-lg);
   padding: 0;
-  background: var(--bg);
-  transition: background-color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-elevated);
+  transition: background-color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease),
+    box-shadow var(--duration-base) var(--ease);
 }
 
 /* The real <button> fills the whole zone so every pixel that used to be
@@ -274,17 +436,13 @@ button {
 }
 
 .upload-zone:hover {
-  background: var(--surface);
-}
-
-.upload-zone__button:hover {
-  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(37, 37, 34, 0.08), 0 0 0 1px var(--border-firm);
 }
 
 .upload-zone--active {
   background: var(--surface);
-  border-style: solid;
-  border-color: var(--fg);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(242, 128, 93, 0.14);
 }
 
 .upload-zone--invalid {
@@ -333,6 +491,11 @@ button {
   text-underline-offset: 2px;
   color: var(--fg);
   font-weight: 500;
+  transition: color var(--duration-fast) var(--ease);
+}
+
+.upload-zone__button:hover .upload-zone__browse {
+  color: var(--coral-pressed);
 }
 
 .upload-zone__hint {
@@ -352,47 +515,185 @@ button {
   margin: 0 var(--space-2);
 }
 
-/* ---------- HowItWorks ---------- */
+/* ---------- HowItWorks (black compact disclosure) ---------- */
 
 .how-it-works {
+  max-width: 560px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-elevated);
+}
+
+.how-it-works__heading {
+  margin: 0;
+}
+
+.how-it-works__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 18px var(--space-5);
+  background: var(--fg);
+  color: var(--on-primary);
+  border: none;
+  text-align: left;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+.how-it-works__trigger:hover {
+  opacity: 0.9;
+}
+
+.how-it-works__trigger:focus-visible {
+  outline-color: var(--on-primary);
+  outline-offset: -3px;
+}
+
+.how-it-works__trigger-title {
+  font-weight: 600;
+  font-size: clamp(1.05rem, 2.5vw, 1.2rem);
+  letter-spacing: -0.01em;
+}
+
+.how-it-works__trigger-icon {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--duration-base) var(--ease);
+}
+
+.how-it-works--open .how-it-works__trigger-icon {
+  transform: rotate(-135deg);
+}
+
+/* Grid-rows 0fr -> 1fr collapse: the standard way to animate to/from "auto"
+   height with a CSS transition (height itself can't transition to/from
+   auto). Reduced-motion users get this instantly via the global
+   transition-duration override in :root. */
+.how-it-works__panel-track {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-base) var(--ease);
+}
+
+.how-it-works--open .how-it-works__panel-track {
+  grid-template-rows: 1fr;
+}
+
+.how-it-works__panel {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.how-it-works__panel-inner {
+  padding: var(--space-5) var(--space-5) var(--space-6);
+}
+
+.how-it-works__feature {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.how-it-works__feature-n {
+  flex-shrink: 0;
+  font-size: clamp(2.25rem, 9vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--border);
+}
+
+.how-it-works__feature-content {
+  min-width: 0;
+}
+
+.how-it-works__feature-icon {
+  display: inline-flex;
+  color: var(--accent);
+  margin-bottom: var(--space-2);
+}
+
+.how-it-works__feature-title {
+  font-size: clamp(1.2rem, 3vw, 1.4rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-2);
+}
+
+.how-it-works__feature-body {
+  color: var(--muted);
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  max-width: 42ch;
+}
+
+.how-it-works__rest {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--space-6);
+  gap: var(--space-5);
 }
 
-@media (min-width: 768px) {
-  .how-it-works {
+@media (min-width: 560px) {
+  .how-it-works__rest {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 .how-it-works__step {
-  border-top: 1px solid var(--border-strong);
-  padding-top: var(--space-4);
+  min-width: 0;
 }
 
-.how-it-works__n {
-  display: block;
+.how-it-works__step-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--muted);
-  font-size: var(--text-2xs);
-  letter-spacing: 0.05em;
   margin-bottom: var(--space-2);
 }
 
-.how-it-works__title {
+.how-it-works__step-icon {
+  display: inline-flex;
+}
+
+.how-it-works__step-n {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.how-it-works__step-title {
   font-size: var(--text-lg);
-  margin: 0 0 var(--space-2);
+  margin: 0 0 6px;
   letter-spacing: -0.01em;
 }
 
-.how-it-works__body {
+.how-it-works__step-body {
   color: var(--muted);
   margin: 0;
   font-size: var(--text-sm);
   line-height: 1.6;
+}
+
+/* ---------- Converter section ---------- */
+
+#converter .section-heading {
+  margin-bottom: var(--space-5);
 }
 
 /* ---------- About ---------- */
@@ -502,9 +803,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: clamp(var(--space-4), 3vw, var(--space-5));
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: clamp(var(--space-5), 3vw, var(--space-6));
   margin: 0;
 }
 
@@ -569,7 +870,7 @@ button {
 
 .segmented button.is-active {
   background: var(--fg);
-  color: var(--bg);
+  color: var(--on-primary);
   font-weight: 600;
 }
 
@@ -703,6 +1004,208 @@ button {
     /* No rotation — the adjacent "Vectorizing your image" text still
        communicates that work is happening, so no feedback is lost. */
     animation: none;
+  }
+}
+
+/* ---------- ConversionLoader (dedicated "converting" screen) ---------- */
+
+.conversion-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  max-width: 460px;
+  margin: 0 auto;
+  padding-block: var(--space-4);
+  text-align: center;
+}
+
+.conversion-loader__preview {
+  width: clamp(84px, 20vw, 112px);
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.conversion-loader__preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.conversion-loader__status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.conversion-loader__headline {
+  margin: 0;
+  font-size: clamp(1.125rem, 3vw, 1.375rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.conversion-loader__subtext {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Decorative stage breadcrumb — real stages only (see ConversionLoader.tsx
+   for why there are exactly two). */
+.conversion-loader__stages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.conversion-loader__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conversion-loader__stage--active {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.conversion-loader__stage-arrow {
+  color: var(--border-strong);
+}
+
+.conversion-loader__stage-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  flex-shrink: 0;
+}
+
+.conversion-loader__stage--done .conversion-loader__stage-dot {
+  color: var(--fg);
+}
+
+/* The active stage's dot is filled and breathes gently to read as "live"
+   without being distracting — neutralized to a static dot under reduced
+   motion via the global animation-duration override in :root. */
+.conversion-loader__stage--active .conversion-loader__stage-dot {
+  border-color: var(--fg);
+  background: var(--fg);
+  animation: stage-pulse 1.6s var(--ease) infinite;
+}
+
+@keyframes stage-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+/* Indeterminate progress pill. imagetracerjs has no progress hook (see
+   vectorizeClient.ts), so this deliberately never renders a percentage —
+   only a moving fill communicating "work is happening now". */
+.conversion-loader__track {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  height: 14px;
+  border: 1.5px solid var(--fg);
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.conversion-loader__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -30%;
+  width: 30%;
+  border-radius: inherit;
+  background: var(--fg);
+  animation: loader-sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes loader-sweep {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* The sweep is invisible at rest (fully off-canvas), so simply freezing it
+   would leave the pill looking empty and broken for reduced-motion users.
+   Show a static, visible fill instead — busy is still communicated, just
+   without motion. */
+@media (prefers-reduced-motion: reduce) {
+  .conversion-loader__fill {
+    animation: none;
+    left: 0;
+    width: 42%;
+  }
+}
+
+.conversion-loader__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 4.5em;
+  max-width: 380px;
+}
+
+.conversion-loader__fact-eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.conversion-loader__fact-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--fg);
+  animation: fact-fade-in var(--duration-base) var(--ease);
+}
+
+@keyframes fact-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 640px) {
+  .conversion-loader {
+    gap: var(--space-6);
+    padding-block: var(--space-6);
+  }
+
+  .conversion-loader__track {
+    height: 16px;
   }
 }
 
@@ -1041,8 +1544,8 @@ button {
 .compare-slider__tag {
   position: absolute;
   top: var(--space-3);
-  background: rgba(10, 10, 10, 0.72);
-  color: var(--white);
+  background: rgba(37, 37, 34, 0.72);
+  color: var(--on-primary);
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1064,8 +1567,8 @@ button {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--white);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.5);
+  background: var(--surface-elevated);
+  box-shadow: 0 0 0 1px rgba(37, 37, 34, 0.5);
   transform: translateX(-1px);
   pointer-events: none;
 }
@@ -1079,7 +1582,7 @@ button {
   height: 44px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: var(--white);
+  background: var(--surface-elevated);
   color: var(--fg);
   border: 1.5px solid var(--fg);
   display: flex;
@@ -1166,10 +1669,10 @@ button {
 .btn {
   min-height: 48px;
   padding-inline: var(--space-5);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-size: var(--text-base);
   font-weight: 500;
-  transition-property: background-color, color, border-color, transform;
+  transition-property: background-color, color, border-color, transform, opacity;
   transition-duration: var(--duration-fast);
   transition-timing-function: var(--ease);
 }
@@ -1185,15 +1688,20 @@ button {
   transform: scale(0.98);
 }
 
+/* Ink pill: Strawberry's primary-action language. Hover/active read through
+   opacity rather than a swapped-in gray, keeping the ink identity intact. */
 .btn-primary {
   background: var(--fg);
-  color: var(--bg);
+  color: var(--on-primary);
   border: 1px solid var(--fg);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--gray-700);
-  border-color: var(--gray-700);
+  opacity: 0.9;
+}
+
+.btn-primary:active:not(:disabled) {
+  opacity: 0.82;
 }
 
 .btn-primary:disabled {
@@ -1205,13 +1713,13 @@ button {
 }
 
 .btn-secondary {
-  background: var(--bg);
+  background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--border-strong);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface);
+  background: var(--surface-elevated);
 }
 
 .btn-secondary:disabled {
@@ -1279,7 +1787,7 @@ summary:focus-visible,
 .compare-slider__handle:focus-visible {
   outline: 3px solid var(--fg);
   outline-offset: 3px;
-  box-shadow: 0 0 0 6px var(--white);
+  box-shadow: 0 0 0 6px var(--surface-elevated);
 }
 
 /* Programmatic focus targets (tabindex="-1") are never Tab stops, so no
@@ -1287,6 +1795,39 @@ summary:focus-visible,
    screen readers still announce the focused heading/alert. */
 [tabindex="-1"]:focus {
   outline: none;
+}
+
+/* ---------- Footer ---------- */
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.site-footer__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6) clamp(var(--space-4), 4vw, var(--space-7));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.site-footer__note,
+.site-footer__copyright {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+@media (min-width: 640px) {
+  .site-footer__inner {
+    flex-direction: row;
+    justify-content: space-between;
+    text-align: left;
+  }
 }
 
 /* ---------- Short viewports (landscape phones, ~380-500px tall) ---------- */

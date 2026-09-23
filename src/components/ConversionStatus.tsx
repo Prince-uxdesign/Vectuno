@@ -4,28 +4,17 @@ import { Button } from "./ui/Button";
 interface ConversionStatusProps {
   stage: Stage;
   onConvert: () => void;
-  onCancel: () => void;
 }
 
-// Only two stages are real: imagetracerjs's imagedataToSVG is a single
-// synchronous call with no internal progress hook (verified in the Phase 1
-// engine evaluation), so "Analyzing image" / "Tracing shapes" / "Optimizing
-// SVG" would be fabricated — there's no way to know which is actually
-// happening. "Preparing image" (decode) and "Vectorizing your image" (the
-// worker call) are the only two stages this pipeline can honestly report.
-const HEADLINE: Partial<Record<Stage, string>> = {
-  preparing: "Preparing image",
-  converting: "Vectorizing your image",
-};
-
-const SUBTEXT: Partial<Record<Stage, string>> = {
-  preparing: "Reading and decoding your file.",
-  converting: "We're tracing the image and generating your SVG.",
-};
-
-export function ConversionStatus({ stage, onConvert, onCancel }: ConversionStatusProps) {
-  const isBusy = stage === "preparing" || stage === "converting";
-  const headline = HEADLINE[stage];
+// The only stage rendered here is "preparing" (decode) — the only other
+// pre-result busy stage, "converting", has its own dedicated screen (see
+// ConversionLoader) since it's the actual vectorization work and deserves
+// the full-screen progress treatment. See docs/vectorization-evaluation.md
+// for why "Analyzing image" / "Tracing shapes" / etc. aren't listed here:
+// imagetracerjs has no internal progress hook, so anything more granular
+// than "Preparing" / "Vectorizing" would be fabricated.
+export function ConversionStatus({ stage, onConvert }: ConversionStatusProps) {
+  const isBusy = stage === "preparing";
 
   return (
     <div className="conversion-status">
@@ -34,26 +23,18 @@ export function ConversionStatus({ stage, onConvert, onCancel }: ConversionStatu
           <>
             <span className="conversion-status__headline">
               <span className="spinner" aria-hidden="true" />
-              {headline}
+              Preparing image
             </span>
-            <span className="conversion-status__subtext">{SUBTEXT[stage]}</span>
+            <span className="conversion-status__subtext">Reading and decoding your file.</span>
           </>
         ) : (
           stage === "ready" && <span className="conversion-status__subtext">Ready to convert.</span>
         )}
       </div>
 
-      {stage === "converting" ? (
-        <div className="conversion-status__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <Button variant="primary" className="conversion-status__cta" onClick={onConvert} disabled={stage !== "ready"}>
-          Convert to SVG
-        </Button>
-      )}
+      <Button variant="primary" className="conversion-status__cta" onClick={onConvert} disabled={stage !== "ready"}>
+        Convert to SVG
+      </Button>
     </div>
   );
 }
