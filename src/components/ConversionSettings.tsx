@@ -1,10 +1,13 @@
 import type { ConversionOptions, Level } from "../types";
 import { CheckmarkIcon } from "./icons/CheckmarkIcon";
+import { Button } from "./ui/Button";
 
 interface ConversionSettingsProps {
   options: ConversionOptions;
   onChange: (options: Partial<ConversionOptions>) => void;
   disabled: boolean;
+  onConvert?: () => void;
+  canConvert?: boolean;
 }
 
 function Segmented<T extends string>({
@@ -53,7 +56,7 @@ function Segmented<T extends string>({
 const LEVEL_OPTIONS: readonly Level[] = ["low", "medium", "high"];
 const LEVEL_LABELS: Record<Level, string> = { low: "Low", medium: "Medium", high: "High" };
 
-export function ConversionSettings({ options, onChange, disabled }: ConversionSettingsProps) {
+export function ConversionSettings({ options, onChange, disabled, onConvert, canConvert }: ConversionSettingsProps) {
   return (
     <fieldset className="conversion-settings" disabled={disabled}>
       <legend className="conversion-settings__title">Conversion settings</legend>
@@ -107,6 +110,17 @@ export function ConversionSettings({ options, onChange, disabled }: ConversionSe
             </p>
           </label>
         </details>
+      )}
+
+      {onConvert && (
+        <Button
+          variant="primary"
+          className="conversion-settings__cta"
+          onClick={onConvert}
+          disabled={!canConvert}
+        >
+          Convert to SVG
+        </Button>
       )}
     </fieldset>
   );

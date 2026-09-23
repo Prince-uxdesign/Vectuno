@@ -53,8 +53,13 @@ export function createDefaultOptions(): ConversionOptions {
   return {
     colorMode: "color",
     numberOfColors: 20,
-    detail: "medium",
-    smoothness: "medium",
+    // Designer-grade fidelity defaults: keep small details (pathomit 4) and
+    // follow edges precisely (ltres/qtres 0.2). Medium/Medium simplified
+    // thin line art into visibly skewed shapes — unacceptable side-by-side
+    // with the original for brand/UI work. Users who want smaller files can
+    // still dial Detail down / Smoothness up.
+    detail: "high",
+    smoothness: "low",
   };
 }
 

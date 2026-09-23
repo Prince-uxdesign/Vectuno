@@ -159,7 +159,13 @@ function App() {
 
   return (
     <div className="app-shell" id="top">
-      <Navigation onStartConverting={scrollToUpload} onNavigateToSection={handleNavigate} />
+      <Navigation
+        onStartConverting={scrollToUpload}
+        onNavigateToSection={handleNavigate}
+        isConvertMode={showWorkspace}
+        onConvert={convert}
+        canConvert={state.stage === "ready" || isRetryableError}
+      />
 
       <main className="app-main">
         {isLanding && (
@@ -241,13 +247,15 @@ function App() {
                       onChooseNew={reset}
                     />
                   ) : (
-                    <ConversionStatus stage={state.stage} onConvert={convert} />
+                    <ConversionStatus stage={state.stage} />
                   )}
 
                   <ConversionSettings
                     options={state.options}
                     onChange={setOptions}
                     disabled={state.stage === "preparing"}
+                    onConvert={convert}
+                    canConvert={state.stage === "ready" || isRetryableError}
                   />
                 </div>
               </div>
@@ -332,9 +340,9 @@ function App() {
               <Container>
                 <h2 className="section-heading">About</h2>
                 <p className="about-text">
-                  Vectuno is a focused image-to-vector converter — nothing more. There's no account to create and
-                  no file storage: your image is decoded and traced locally in your browser, and nothing leaves
-                  your device.
+                  Vectuno turns your PNG, JPG, or WebP images into crisp SVG vectors you can scale to any
+                  size without losing quality — perfect for logos, icons, and brand work. No sign-up needed,
+                  and everything happens privately on your own device.
                 </p>
               </Container>
             </Section>

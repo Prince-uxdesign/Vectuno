@@ -4,9 +4,18 @@ import { Button } from "./ui/Button";
 interface NavigationProps {
   onStartConverting: () => void;
   onNavigateToSection: (sectionId: string) => void;
+  isConvertMode?: boolean;
+  onConvert?: () => void;
+  canConvert?: boolean;
 }
 
-export function Navigation({ onStartConverting, onNavigateToSection }: NavigationProps) {
+export function Navigation({
+  onStartConverting,
+  onNavigateToSection,
+  isConvertMode = false,
+  onConvert,
+  canConvert = false,
+}: NavigationProps) {
   return (
     <header className="site-header">
       <div className="site-header__inner">
@@ -45,9 +54,20 @@ export function Navigation({ onStartConverting, onNavigateToSection }: Navigatio
           </a>
         </nav>
 
-        <Button variant="primary" className="site-header__cta" onClick={onStartConverting}>
-          Start converting
-        </Button>
+        {isConvertMode ? (
+          <Button
+            variant="primary"
+            className="site-header__cta"
+            onClick={onConvert}
+            disabled={!canConvert}
+          >
+            Convert to SVG
+          </Button>
+        ) : (
+          <Button variant="primary" className="site-header__cta" onClick={onStartConverting}>
+            Start converting
+          </Button>
+        )}
       </div>
     </header>
   );

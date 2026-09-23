@@ -1,11 +1,12 @@
 import type { Stage } from "../types";
-import { Button } from "./ui/Button";
 
 interface ConversionStatusProps {
   stage: Stage;
-  onConvert: () => void;
 }
 
+// Status text only — the Convert to SVG actions live in the site header
+// (when a file is loaded) and at the bottom of the conversion settings
+// card, so this component no longer renders its own CTA button.
 // The only stage rendered here is "preparing" (decode) — the only other
 // pre-result busy stage, "converting", has its own dedicated screen (see
 // ConversionLoader) since it's the actual vectorization work and deserves
@@ -13,7 +14,7 @@ interface ConversionStatusProps {
 // for why "Analyzing image" / "Tracing shapes" / etc. aren't listed here:
 // imagetracerjs has no internal progress hook, so anything more granular
 // than "Preparing" / "Vectorizing" would be fabricated.
-export function ConversionStatus({ stage, onConvert }: ConversionStatusProps) {
+export function ConversionStatus({ stage }: ConversionStatusProps) {
   const isBusy = stage === "preparing";
 
   return (
@@ -31,10 +32,6 @@ export function ConversionStatus({ stage, onConvert }: ConversionStatusProps) {
           stage === "ready" && <span className="conversion-status__subtext">Ready to convert.</span>
         )}
       </div>
-
-      <Button variant="primary" className="conversion-status__cta" onClick={onConvert} disabled={stage !== "ready"}>
-        Convert to SVG
-      </Button>
     </div>
   );
 }

@@ -115,12 +115,12 @@ async function auditReadyState(page, v, file = "02-color-logo.png") {
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, file));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await checkOverflow(page, v.label, "ready");
-  await checkTouchTargets(page, v.label, "ready", [".conversion-status .btn-primary", ".segmented button", ".file-preview .btn-secondary"]);
+  await checkTouchTargets(page, v.label, "ready", [".conversion-settings__cta", ".segmented button", ".file-preview .btn-secondary"]);
   await checkTextClipping(page, v.label, "ready");
 }
 
 async function auditResultState(page, v) {
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.waitForSelector(".result-screen, .error-state", { timeout: 30000 });
   if ((await page.locator(".error-state").count()) > 0) {
     report(v.label, "result", "unexpected error state", await page.locator(".error-state__message").textContent());
@@ -171,7 +171,7 @@ async function auditLongFilename(page, v) {
   await page.locator('input[type="file"]').setInputFiles({ name: longName, mimeType: "image/png", buffer: buf });
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await checkOverflow(page, v.label, "long-filename-ready");
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.waitForSelector(".result-screen, .error-state", { timeout: 30000 });
   await checkOverflow(page, v.label, "long-filename-result");
 }
