@@ -5,9 +5,12 @@ interface ResultMetadataProps {
   height: number;
   sizeBytes: number;
   pathCount: number;
+  // Number of distinct fills detected in the SVG. Optional: only shown when
+  // the caller actually computed it — never guessed.
+  colorCount?: number | null;
 }
 
-export function ResultMetadata({ width, height, sizeBytes, pathCount }: ResultMetadataProps) {
+export function ResultMetadata({ width, height, sizeBytes, pathCount, colorCount }: ResultMetadataProps) {
   return (
     <dl className="result-metadata" aria-label="SVG details">
       <div className="result-metadata__row">
@@ -28,6 +31,12 @@ export function ResultMetadata({ width, height, sizeBytes, pathCount }: ResultMe
         <dt>Paths</dt>
         <dd>{pathCount}</dd>
       </div>
+      {colorCount !== undefined && colorCount !== null && (
+        <div className="result-metadata__row">
+          <dt>Colors</dt>
+          <dd>{colorCount}</dd>
+        </div>
+      )}
     </dl>
   );
 }

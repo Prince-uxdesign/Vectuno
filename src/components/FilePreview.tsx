@@ -5,14 +5,13 @@ import { BackgroundToggle } from "./BackgroundToggle";
 interface FilePreviewProps {
   previewUrl: string;
   onChangeImage: () => void;
-  disabled?: boolean;
   // Only passed when the image has transparency — otherwise the backdrop
   // would be invisible and the control would be noise.
   background?: PreviewBackground;
   onBackgroundChange?: (value: PreviewBackground) => void;
 }
 
-export function FilePreview({ previewUrl, onChangeImage, disabled, background, onBackgroundChange }: FilePreviewProps) {
+export function FilePreview({ previewUrl, onChangeImage, background, onBackgroundChange }: FilePreviewProps) {
   const showBackground = background !== undefined && onBackgroundChange !== undefined;
   return (
     <div className="file-preview">
@@ -20,7 +19,7 @@ export function FilePreview({ previewUrl, onChangeImage, disabled, background, o
         <img src={previewUrl} alt="Uploaded image preview" className="file-preview__image" />
       </div>
       {showBackground && <BackgroundToggle value={background} onChange={onBackgroundChange} />}
-      <Button variant="secondary" onClick={onChangeImage} disabled={disabled}>
+      <Button variant="secondary" onClick={onChangeImage}>
         Change image
       </Button>
     </div>

@@ -66,7 +66,7 @@ export function traceRaw(
       if (msg.ok) {
         resolve({ svg: msg.svg, elapsedMs: msg.elapsedMs, plan });
       } else {
-        reject(new AppError("VECTORIZE_FAILED", "We couldn't convert this image.", "Try again, or choose a different image."));
+        reject(new AppError("VECTORIZE_FAILED", "Vectuno couldn't convert this image.", "Try again, or choose a different image."));
       }
     };
 

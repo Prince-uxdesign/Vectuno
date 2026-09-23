@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigation } from "./components/Navigation";
 import { UploadZone } from "./components/UploadZone";
 import { HowItWorks } from "./components/HowItWorks";
@@ -6,6 +6,7 @@ import { ImageShowcase } from "./components/ImageShowcase";
 import { Footer } from "./components/Footer";
 import { FilePreview } from "./components/FilePreview";
 import { FileMetadata } from "./components/FileMetadata";
+import { QualityNotice } from "./components/QualityNotice";
 import { ConversionSettings } from "./components/ConversionSettings";
 import { ConversionStatus } from "./components/ConversionStatus";
 import { ConversionLoader } from "./components/ConversionLoader";
@@ -17,7 +18,9 @@ import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
 import { useBatchConverter } from "./state/useBatchConverter";
 import { useImageIntake, type IntakeSource } from "./state/useImageIntake";
-import type { PreviewBackground } from "./types";
+import { analyzeQuality } from "./lib/image/quality";
+import { PRESETS } from "./lib/engine/presets";
+import type { PreviewBackground, PresetId } from "./types";
 
 const FALLBACK_ERROR_MESSAGE = "Something unexpected happened.";
 const FALLBACK_ERROR_HINT = "Try again, or choose a different image.";
@@ -59,6 +62,43 @@ function App() {
   const showConverting = !isBatchActive && state.stage === "converting";
   const showResult = !isBatchActive && state.stage === "success";
   const showError = !isBatchActive && state.stage === "error";
+
+  // Expectation-setting guidance derived from the decoded pixels (sampled,
+  // memoized — no re-scan per render). Null until an image is decoded.
+  const quality = useMemo(() => {
+    if (!state.decoded) return null;
+    return analyzeQuality(
+      state.decoded.imageData.data,
+      state.decoded.imageData.width,
+      state.decoded.imageData.height,
+      state.decoded.originalWidth,
+      state.decoded.originalHeight
+    );
+  }, [state.decoded]);
+
+  // A failed conversion of photographic/complex artwork genuinely converts
+  // better under a simpler preset — so offer exactly that, instead of only
+  // "try the same thing again". The current preset is excluded; the image
+  // and all other settings are preserved, and selecting one retries
+  // immediately. Shown only when complexity was actually detected.
+  const retrySuggestions = useMemo(() => {
+    if (!isRetryableError || !quality?.photoLike) return undefined;
+    const fallbacks: PresetId[] = ["clean", "balanced", "monochrome"];
+    return fallbacks
+      .filter((preset) => preset !== state.options.preset)
+      .slice(0, 2)
+      .map((preset) => ({
+        label: `Try ${PRESETS[preset].label} mode`,
+        onSelect: () => {
+          setOptions({ preset });
+          convert();
+        },
+      }));
+  }, [isRetryableError, quality, state.options.preset, setOptions, convert]);
+
+  const retryExtraHint = isRetryableError && quality?.photoLike
+    ? "This image contains a large amount of photographic detail. Vectuno works best with logos, icons and illustrations."
+    : null;
 
   const showNotice = useCallback((message: string) => {
     clearTimeout(noticeTimerRef.current);
@@ -284,6 +324,8 @@ function App() {
                     />
                   )}
 
+                  {quality && <QualityNotice analysis={quality} />}
+
                   {state.decoded?.wasDownsampled && (
                     <p className="app-notice">
                       This image was downsampled to {state.decoded.processedWidth}×
@@ -301,6 +343,8 @@ function App() {
                       recovery="retry"
                       onRetry={convert}
                       onChooseNew={handleChangeImage}
+                      extraHint={retryExtraHint}
+                      suggestions={retrySuggestions}
                     />
                   ) : (
                     <ConversionStatus stage={state.stage} />
