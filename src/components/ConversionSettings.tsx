@@ -1,5 +1,6 @@
-import type { ConversionOptions, Level } from "../types";
-import { CheckmarkIcon } from "./icons/CheckmarkIcon";
+import { useId } from "react";
+import type { ConversionOptions } from "../types";
+import { PresetPicker } from "./PresetPicker";
 import { Button } from "./ui/Button";
 
 interface ConversionSettingsProps {
@@ -10,115 +11,53 @@ interface ConversionSettingsProps {
   canConvert?: boolean;
 }
 
-function Segmented<T extends string>({
-  legend,
-  hint,
-  value,
-  options,
-  labels,
-  onChange,
-}: {
-  legend: string;
-  hint?: string;
-  value: T;
-  options: readonly T[];
-  labels: Record<T, string>;
-  onChange: (v: T) => void;
-}) {
-  const labelId = `${legend.toLowerCase().replace(/\s+/g, "-")}-label`;
-  return (
-    <div className="conversion-settings__group">
-      <span className="conversion-settings__group-label" id={labelId}>
-        {legend}
-      </span>
-      <div className="segmented" role="group" aria-labelledby={labelId}>
-        {options.map((opt) => {
-          const isActive = value === opt;
-          return (
-            <button
-              key={opt}
-              type="button"
-              aria-pressed={isActive}
-              className={isActive ? "is-active" : ""}
-              onClick={() => onChange(opt)}
-            >
-              {isActive && <CheckmarkIcon className="segmented__check" />}
-              {labels[opt]}
-            </button>
-          );
-        })}
-      </div>
-      {hint && <p className="conversion-settings__hint">{hint}</p>}
-    </div>
-  );
-}
-
-const LEVEL_OPTIONS: readonly Level[] = ["low", "medium", "high"];
-const LEVEL_LABELS: Record<Level, string> = { low: "Low", medium: "Medium", high: "High" };
+// Shown as the slider position while "Auto" is selected.
+const AUTO_SLIDER_START = 12;
 
 export function ConversionSettings({ options, onChange, disabled, onConvert, canConvert }: ConversionSettingsProps) {
+  const colorsId = useId();
+  const isMonochrome = options.preset === "monochrome";
+  const customColors = options.colorCount !== null;
+
   return (
     <fieldset className="conversion-settings" disabled={disabled}>
       <legend className="conversion-settings__title">Conversion settings</legend>
 
-      <Segmented
-        legend="Mode"
-        hint="Color keeps the image's colors; Monochrome traces everything in black and white."
-        value={options.colorMode}
-        options={["color", "bw"] as const}
-        labels={{ color: "Color", bw: "Monochrome" }}
-        onChange={(colorMode) => onChange({ colorMode })}
-      />
+      <PresetPicker value={options.preset} onChange={(preset) => onChange({ preset })} />
 
-      <Segmented
-        legend="Detail"
-        hint="How many shapes are kept. Low keeps only the major shapes; High preserves small details too."
-        value={options.detail}
-        options={LEVEL_OPTIONS}
-        labels={LEVEL_LABELS}
-        onChange={(detail) => onChange({ detail })}
-      />
-
-      <Segmented
-        legend="Smoothness"
-        hint="How closely curves follow the original edges. Higher is smoother and simpler; lower is more precise."
-        value={options.smoothness}
-        options={LEVEL_OPTIONS}
-        labels={LEVEL_LABELS}
-        onChange={(smoothness) => onChange({ smoothness })}
-      />
-
-      {options.colorMode === "color" && (
+      {/* A single-color result has no palette to size, so the control only
+          appears for the color presets. */}
+      {!isMonochrome && (
         <details className="advanced-disclosure">
           <summary>Advanced</summary>
-          <label className="conversion-settings__group conversion-settings__group--advanced">
-            <span className="conversion-settings__group-label" id="colors-label">
-              Colors: {options.numberOfColors}
+          <div className="conversion-settings__group conversion-settings__group--advanced">
+            <span className="conversion-settings__group-label" id={colorsId}>
+              Colors: {customColors ? options.colorCount : "Auto"}
             </span>
             <input
               type="range"
               min={2}
               max={64}
-              value={options.numberOfColors}
-              onChange={(e) => onChange({ numberOfColors: Number(e.target.value) })}
-              aria-labelledby="colors-label"
-              aria-valuetext={`${options.numberOfColors} colors`}
+              value={options.colorCount ?? AUTO_SLIDER_START}
+              onChange={(e) => onChange({ colorCount: Number(e.target.value) })}
+              aria-labelledby={colorsId}
+              aria-valuetext={customColors ? `${options.colorCount} colors` : "Automatic"}
             />
             <p className="conversion-settings__hint">
-              How many distinct colors the traced SVG can use. Fewer colors gives a simpler, more poster-like
-              result.
+              Auto picks the number of colors from your image. Choose a number to fix the palette — fewer colors
+              gives a simpler, more poster-like result.
             </p>
-          </label>
+            {customColors && (
+              <button type="button" className="conversion-settings__reset" onClick={() => onChange({ colorCount: null })}>
+                Use automatic colors
+              </button>
+            )}
+          </div>
         </details>
       )}
 
       {onConvert && (
-        <Button
-          variant="primary"
-          className="conversion-settings__cta"
-          onClick={onConvert}
-          disabled={!canConvert}
-        >
+        <Button variant="primary" className="conversion-settings__cta" onClick={onConvert} disabled={!canConvert}>
           Convert to SVG
         </Button>
       )}

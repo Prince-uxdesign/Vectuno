@@ -87,37 +87,61 @@ decode, dimensions, transparency) → preview → the normal conversion flow.
 - **Change image / Convert another image** return to a fresh upload state,
   including default conversion settings.
 
-## Conversion settings
+## Presets
 
-Three core settings, mapped to `imagetracerjs` parameters that were verified
-— not assumed — to actually change output (`npm run test:settings`):
+The normal flow is **choose a preset → Convert**. Each preset is a full engine
+configuration (`src/lib/engine/presets.ts`), not a label; the UI only shows
+its name and a one-line description.
 
-| Setting | User sees | Engine parameter | Verified effect |
-|---|---|---|---|
-| Mode | Color / Monochrome | `numberofcolors` (2 vs. user value) | obvious |
-| Detail | Low / Medium / High | `pathomit` (40 / 16 / 4) | path count only — which shapes survive |
-| Smoothness | Low / Medium / High | `ltres`/`qtres` (0.2 / 1 / 4) | file size only, same path count — curve simplification |
+| Preset | For | What it changes |
+|---|---|---|
+| **Clean** | Logos, icons, simple graphics | ≤ 8 fills (a fill needs ≥ 0.5% of the image to count), near-colors merged (RGB distance 40), one pass of 3×3 edge smoothing, curve fit tolerance 1.5 (fewest nodes), tiny paths under ~1% of the image dropped |
+| **Balanced** *(default)* | Most images | ≤ 20 fills (≥ 0.3%), merge distance 28, curve fit 0.6, edge tolerance 36 |
+| **Detailed** | Complex illustration | ≤ 32 fills (≥ 0.2%), merge distance 24, curve fit 0.3, keeps finer shapes |
+| **Monochrome** | B/W logos, icons, line art | Otsu-thresholds the image to ink/background (border decides which is which), traces two colors, and emits **one black compound path** with true transparent holes |
 
-Detail and Smoothness are kept independent: Detail changes *what* gets
-traced, Smoothness changes *how* the curves are fit, and
-`scripts/benchmark-settings.mjs` asserts that relationship holds (monotonic
-path count for Detail, monotonic size for Smoothness) on every run.
+**Advanced → Colors** fixes the palette size (2–64) instead of letting the
+preset choose ("Auto"); it is hidden for Monochrome.
 
-**Advanced** (collapsed `<details>`, Color mode only): a 2–64 "Colors" slider
-(`numberofcolors` directly, clamped in `presets.ts`). When left at the
-default 20, flat art is adapted down automatically (`estimatePaletteSize`:
-images needing ≤4 dominant colors trace with 8) — a fixed 20 keeps JPEG
-ringing and antialiased edge bands as separate dull palette entries on
-4-color cartoons. An explicit slider choice always wins over the heuristic.
+How the color presets work: the image's real fills are found first (exact
+most-common colors, not averages), pixels are snapped to them — in-between
+anti-aliased/JPEG blends resolve to whichever neighbor they resemble rather
+than to a third color — and the tracer is handed that exact palette. Images
+that don't reduce to a small palette (gradients, photographs) skip the
+snapping and are traced from the original pixels.
 
-**Not implemented: Background Keep/Remove.** `imagetracerjs` has no
-background-detection or removal capability — it traces whatever pixels are
-there, preserving existing alpha as per-path opacity.
+## SVG cleanup
 
-**Defaults:** Mode=Color, Detail=Medium, Smoothness=Medium, Colors=20. 20
-rather than a round 16 for an engine-specific reason (imagetracerjs's grid
-palette sampling) — see the comment on `createDefaultOptions` in
-`src/types/index.ts`.
+`lib/engine/optimizeSvg.ts` runs inside the worker after tracing. Every step
+was measured by rendering original raster → tracer output → cleaned SVG in
+Chromium (`npm run test:cleanup`, `npm run test:presets`).
+
+Kept:
+
+- **Lossless hygiene** — viewBox, metadata, zero-opacity paths, `opacity`
+  rounding to 3 decimals, dead zero-width strokes, `rgb()` → hex. Renders
+  pixel-identically to the tracer's output on all 24 test images (0.0000 MAE),
+  5–54% smaller.
+- **Shape stacking** — the tracer emits "tiles with cut-out holes", which
+  leaves hairline seams between neighbors. Painting shapes largest-first
+  without the duplicate holes removes the seams without fattening anything,
+  and is 25–28% smaller. It improves fidelity on average and never made an
+  image worse by more than 0.05 MAE. Only used for fully opaque art; holes no
+  other shape fills are kept.
+- **Speckle removal** — flat art only, per subpath, so a removed dot's hole is
+  filled by its parent. Cuts paths 35% on Balanced for −0.012 MAE.
+
+Rejected (measured, then removed):
+
+- **Crack sealing by hairline strokes** (the previous approach): fattened every
+  shape — MAE on a two-color logo went 0.13 → 0.63 and on hairline art
+  0.04 → 6.96. Replaced by stacking.
+- **Merging near-duplicate fills, snapping the background to the dominant
+  color, dropping duplicate paths**: exactly zero effect once fills come from
+  an exact palette; on photographs the background snap made results worse.
+  Deleted rather than kept as dead code.
+- **Speckle removal on photographs/gradients**: it deletes real image content
+  (worse fidelity), so it only runs on flat art.
 
 ## Batch conversion
 
@@ -181,8 +205,8 @@ src/
                         valid vs. unsupported drag (icon + text, not color alone)
     FilePreview           contained thumbnail + "Change image"
     FileMetadata           name / type / size / dimensions
-    ConversionSettings     Mode/Detail/Smoothness (segmented, checkmark + bold
-                           on selection, not color alone) + collapsed Advanced
+    PresetPicker           Clean / Balanced / Detailed / Monochrome radio cards
+    ConversionSettings     preset picker + collapsed Advanced (Colors)
     ConversionStatus       headline+subtext status, Convert trigger
     ConversionLoader       dedicated "converting" screen with rotating facts
     ResultPreview           CompareSlider + result metadata + actions
@@ -211,8 +235,6 @@ npm run test:fixtures       # regenerate test/fixtures/*.png|jpg|webp (15 fixtur
                              # including a webp source, a corrupted file, and an
                              # oversized-dimensions file for error-path coverage)
 npm run test:benchmark      # run imagetracerjs against all fixtures, print size/paths/time
-npm run test:settings       # verify Detail/Smoothness are monotonic on real fixtures
-                             # (fails the build if a future preset change breaks that)
 npm run test:e2e            # single-file user-journey suite: upload, convert, cancel,
                              # errors, settings changes, keyboard/touch, breakpoints
 npm run test:e2e-input      # picker, drag-and-drop, clipboard paste, validation,

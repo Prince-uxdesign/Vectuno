@@ -386,8 +386,7 @@ async function testReset() {
 
   await input.setInputFiles(path.join(FIXTURES, "01-bw-logo.png"));
   await waitWorkspace(page);
-  await page.locator(".conversion-settings__group", { hasText: "Detail" }).getByRole("button", { name: "Low" }).click();
-  await page.locator(".conversion-settings__group", { hasText: "Mode" }).getByRole("button", { name: "Monochrome" }).click();
+  await page.getByRole("radio", { name: /^Detailed/ }).check({ force: true });
   await convert(page);
   ok("first conversion complete", true);
 
@@ -402,9 +401,7 @@ async function testReset() {
   await input.setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await waitWorkspace(page);
   ok("second image replaces the first", (await page.locator(".file-metadata__name").textContent()) === "02-color-logo.png");
-  const detail = await page.locator(".conversion-settings__group", { hasText: "Detail" }).locator('button[aria-pressed="true"]').textContent();
-  const mode = await page.locator(".conversion-settings__group", { hasText: "Mode" }).locator('button[aria-pressed="true"]').textContent();
-  ok("settings reset to defaults (Detail High, Color)", detail?.trim() === "High" && mode?.trim() === "Color", `${detail}/${mode}`);
+  ok("settings reset to the default preset (Balanced)", await page.getByRole("radio", { name: /^Balanced/ }).isChecked());
   ok("no stale result is shown", (await page.locator(".result-screen").count()) === 0);
 
   await backToLanding(page);
@@ -478,7 +475,7 @@ async function testResponsive() {
     r = await overflowReport(page);
     ok(`${tag} workspace: no horizontal overflow`, r.scrollW <= r.vw && r.offenders.length === 0, `${r.scrollW}>${r.vw} ${r.offenders.join("; ")}`);
     if (touch) {
-      const small = await smallTargets(page, [".file-preview .btn", ".bg-toggle button", ".conversion-settings .segmented button", ".conversion-settings__cta"]);
+      const small = await smallTargets(page, [".file-preview .btn", ".bg-toggle button", ".preset-card", ".conversion-settings__cta"]);
       ok(`${tag} workspace: touch targets >= 44px`, small.length === 0, small.join(", "));
     }
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `workspace-${w}.png`), fullPage: true });

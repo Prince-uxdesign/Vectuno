@@ -306,45 +306,53 @@ async function testSequentialConversions() {
   await page.close();
 }
 
-// ---------- 9. Settings genuinely change output ----------
+// ---------- 9. Presets genuinely change output ----------
 async function testSettingsChangeOutput() {
-  console.log("\n[settings change output]");
+  console.log("\n[presets change output]");
 
-  async function convertWith(detail, smoothness) {
-    const page = await browser.newPage();
+  async function convertWith(presetName, fixture = "17-badge.png") {
+    const page = await browser.newPage({ acceptDownloads: true });
     await page.goto(BASE, { waitUntil: "networkidle" });
-    await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
+    await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, fixture));
     await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-    await page.getByRole("group", { name: "Detail" }).getByRole("button", { name: detail, exact: true }).click();
-    await page
-      .getByRole("group", { name: "Smoothness" })
-      .getByRole("button", { name: smoothness, exact: true })
-      .click();
+    await page.getByRole("radio", { name: new RegExp(`^${presetName}`) }).check({ force: true });
     await page.locator(".conversion-settings__cta").click();
     await page.waitForSelector(".result-screen", { timeout: 30000 });
     const stats = await page.locator(".result-metadata").textContent();
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download SVG" }).click()]);
+    const chunks = [];
+    for await (const c of await download.createReadStream()) chunks.push(c);
+    const svg = Buffer.concat(chunks).toString("utf8");
     await page.close();
-    const paths = Number(/Paths(\d+)/.exec(stats ?? "")?.[1] ?? -1);
-    return { stats, paths };
+    const paths = (svg.match(/<path[\s/>]/g) ?? []).length;
+    const nodes = [...svg.matchAll(/\bd="([^"]*)"/g)].reduce((n, m) => n + (m[1].match(/[MLQCZ]/g) ?? []).length, 0);
+    return { stats, svg, paths, nodes };
   }
 
-  const low = await convertWith("Low", "Low");
-  const high = await convertWith("High", "High");
+  const results = {};
+  for (const name of ["Clean", "Balanced", "Detailed", "Monochrome"]) results[name] = await convertWith(name);
+  const names = Object.keys(results);
+  const distinct = new Set(names.map((n) => results[n].svg)).size === names.length;
+  ok("all four presets produce different SVGs", distinct);
   ok(
-    "Low detail/smoothness produces fewer paths than High (real, measurable difference)",
-    low.paths >= 0 && high.paths > low.paths,
-    `low=${low.stats} high=${high.stats}`
+    "Clean uses fewer nodes than Balanced, Balanced fewer than Detailed",
+    results.Clean.nodes < results.Balanced.nodes && results.Balanced.nodes < results.Detailed.nodes,
+    names.map((n) => `${n}=${results[n].nodes}`).join(" ")
   );
+  ok("Monochrome is a single compound path", results.Monochrome.paths === 1 && /fill-rule="evenodd"/.test(results.Monochrome.svg));
+  ok("Monochrome uses only black", !/fill="#(?!000")/.test(results.Monochrome.svg));
+  ok("every preset yields real vector geometry (paths, no embedded raster)", names.every((n) => results[n].paths > 0 && !/<image\b/.test(results[n].svg)));
 
-  // Monochrome mode should hide the Advanced (colors) section entirely —
-  // colour count is meaningless once output is forced to 2 colors.
+  // Monochrome hides the Advanced (colors) section — a single-color result
+  // has no palette to size.
   const page = await browser.newPage();
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  ok("Advanced (colors) visible in Color mode", await page.locator(".advanced-disclosure").isVisible());
-  await page.getByRole("group", { name: "Mode" }).getByRole("button", { name: "Monochrome" }).click();
-  ok("Advanced (colors) hidden in Monochrome mode", (await page.locator(".advanced-disclosure").count()) === 0);
+  ok("Balanced is the default preset", await page.getByRole("radio", { name: /^Balanced/ }).isChecked());
+  ok("Advanced (colors) visible for color presets", await page.locator(".advanced-disclosure").isVisible());
+  await page.getByRole("radio", { name: /^Monochrome/ }).check({ force: true });
+  ok("Advanced (colors) hidden for Monochrome", (await page.locator(".advanced-disclosure").count()) === 0);
   await page.close();
 }
 
@@ -415,9 +423,8 @@ async function testNoAutoConvert() {
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   // Flip every core setting; none of this should trigger a conversion.
-  await page.getByRole("group", { name: "Detail" }).getByRole("button", { name: "High", exact: true }).click();
-  await page.getByRole("group", { name: "Smoothness" }).getByRole("button", { name: "Low", exact: true }).click();
-  await page.getByRole("group", { name: "Mode" }).getByRole("button", { name: "Monochrome" }).click();
+  await page.getByRole("radio", { name: /^Detailed/ }).check({ force: true });
+  await page.getByRole("radio", { name: /^Monochrome/ }).check({ force: true });
   await page.waitForTimeout(500);
   ok(
     "changing settings does not start a conversion",

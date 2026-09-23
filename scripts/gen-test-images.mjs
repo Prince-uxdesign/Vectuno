@@ -226,4 +226,81 @@ await fromSvg(
   9000, 1200
 );
 
+// 16. Two-color logo (brand blue + white, geometric mark)
+await fromSvg(
+  "16-two-color-logo",
+  svgWrap(600, 600, `
+    <rect width="600" height="600" fill="#ffffff"/>
+    <rect x="60" y="60" width="480" height="480" rx="96" fill="#1f4fd8"/>
+    <path d="M170 380 L300 170 L430 380 Z" fill="#ffffff"/>
+    <circle cx="300" cy="330" r="46" fill="#1f4fd8"/>
+    <rect x="150" y="410" width="300" height="26" rx="13" fill="#ffffff"/>
+  `),
+  600, 600
+);
+
+// 17. Badge: ring, star, ribbon, dotted border (holes + several flat colors)
+{
+  let dots = "";
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2;
+    dots += `<circle cx="${(300 + 248 * Math.cos(a)).toFixed(1)}" cy="${(300 + 248 * Math.sin(a)).toFixed(1)}" r="7" fill="#f2c14e"/>`;
+  }
+  const star = Array.from({ length: 10 }, (_, i) => {
+    const r = i % 2 === 0 ? 120 : 52;
+    const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
+    return `${(300 + r * Math.cos(a)).toFixed(1)},${(300 + r * Math.sin(a)).toFixed(1)}`;
+  }).join(" ");
+  await fromSvg(
+    "17-badge",
+    svgWrap(600, 600, `
+      <rect width="600" height="600" fill="#fbf7ef"/>
+      <circle cx="300" cy="300" r="280" fill="#16324f"/>
+      ${dots}
+      <circle cx="300" cy="300" r="212" fill="#fbf7ef"/>
+      <circle cx="300" cy="300" r="192" fill="#c8402f"/>
+      <polygon points="${star}" fill="#f2c14e"/>
+      <circle cx="300" cy="300" r="26" fill="#16324f"/>
+      <path d="M150 470 L450 470 L420 520 L450 570 L150 570 L180 520 Z" fill="#16324f"/>
+      <rect x="200" y="505" width="200" height="14" rx="7" fill="#fbf7ef"/>
+    `),
+    600, 600
+  );
+}
+
+// 18. Multicolor logo (overlapping flat shapes, five brand colors)
+const MULTI_LOGO = svgWrap(600, 600, `
+  <rect width="600" height="600" fill="#ffffff"/>
+  <circle cx="230" cy="250" r="150" fill="#ef476f"/>
+  <circle cx="370" cy="250" r="150" fill="#ffd166"/>
+  <circle cx="300" cy="380" r="150" fill="#06d6a0"/>
+  <path d="M300 150 L370 250 L300 380 L230 250 Z" fill="#118ab2"/>
+  <circle cx="300" cy="270" r="34" fill="#073b4c"/>
+`);
+await fromSvg("18-multicolor-logo", MULTI_LOGO, 600, 600);
+
+// 19. The same logo saved as a lossy JPEG (ringing around every edge)
+await sharp(Buffer.from(MULTI_LOGO), { density: 96 })
+  .resize(600, 600)
+  .jpeg({ quality: 70 })
+  .toFile(`${OUT}/19-logo.jpg`);
+console.log("wrote 19-logo");
+
+// 20. Monochrome line icon (thin strokes, closed shapes with holes)
+await fromSvg(
+  "20-mono-lineart",
+  svgWrap(500, 500, `
+    <rect width="500" height="500" fill="#ffffff"/>
+    <g fill="none" stroke="#111" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M90 240 L250 100 L410 240"/>
+      <path d="M130 215 L130 400 L370 400 L370 215"/>
+      <rect x="215" y="290" width="70" height="110"/>
+      <circle cx="250" cy="205" r="26"/>
+      <path d="M330 130 L330 90 L360 90 L360 155"/>
+    </g>
+    <circle cx="268" cy="345" r="5" fill="#111"/>
+  `),
+  500, 500
+);
+
 console.log("done");

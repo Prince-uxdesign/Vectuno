@@ -1,3 +1,34 @@
+// Post-trace SVG cleanup. Every pass here is opt-in per preset (see
+// CleanupConfig) and was measured against the source raster — see
+// scripts/preset-eval.mjs. Fidelity comes first: a pass earns its place only
+// if rendering the cleaned SVG stays visually indistinguishable from the raw
+// trace on the test set.
+
+export interface CleanupConfig {
+  // Drop isolated micro-paths / hairline slivers (flat art only). Size scales
+  // with the image: clamp(longestSide * fraction, min, max) pixels.
+  speckle: { fraction: number; min: number; max: number } | null;
+  // Paint shapes as a stack (largest first) instead of tiles with cut-out
+  // holes. Removes the hairline seams tiling leaves between neighbors without
+  // changing any shape, and drops the duplicate hole geometry. Only applied to
+  // fully opaque artwork.
+  stackShapes: boolean;
+  // rgb(r,g,b) -> #rgb / #rrggbb (lossless).
+  compactColors: boolean;
+  // Rebuild the trace as one single-color compound path on a transparent
+  // background (Monochrome preset only).
+  monochrome: boolean;
+}
+
+export interface OptimizeInput {
+  cleanup: CleanupConfig;
+  // The source had any non-opaque pixel (holes may then be real see-through).
+  hasTransparency?: boolean;
+  // The trace came from a flat-art palette. Only then are tiny paths noise:
+  // in a photograph or gradient the small regions ARE the image.
+  flat?: boolean;
+}
+
 // imagetracerjs emits only width/height on the root <svg> — no viewBox. That
 // means the file doesn't scale via CSS/container sizing the way a normal
 // vector export does, and some editors treat a viewBox-less SVG's canvas
@@ -15,267 +46,297 @@ function addViewBox(svg: string): string {
   return svg.replace(/<svg\b/, `<svg viewBox="0 0 ${width} ${height}"`);
 }
 
-// Deterministic speckle strip: imagetracerjs with pathomit still emits
-// isolated micro-paths from JPEG ringing / dithered pixels (the "dots all
-// over the black" look) plus thin edge-fringe slivers along high-contrast
-// boundaries. Two rules, both general (no color-specific logic):
-//   1. Drop anything smaller than minSize in BOTH axes (dots).
-//   2. Drop thin slivers: bbox area under minSize²/3 while the long side is
-//      still under minSize×2 (e.g. 1×16px pink fringe on a 1200px image).
+interface Box {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+function pathBox(d: string): Box | null {
+  const nums = d.match(/-?\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 4) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = Number(nums[i]);
+    const y = Number(nums[i + 1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null;
+}
+
+function dOf(tag: string): string {
+  return /\bd="([^"]*)"/.exec(tag)?.[1] ?? "";
+}
+
+const RGB_FILL = /fill="rgb\((\d+),(\d+),(\d+)\)"/;
+// Translucent paths (opacity < 1) are never stacked: their on-screen color
+// depends on what is behind them.
+const HAS_OPACITY = /\sopacity="(?!1")/;
+
+// Paths, regions and holes. A traced <path> is one boundary plus everything
+// nested under it, written as several subpaths with the nonzero rule: holes
+// wind the opposite way to the outer boundary, and same-color "islands" inside
+// those holes wind the same way. Splitting by winding gives independent
+// regions (outer boundaries and islands) plus the holes cut out of them.
+interface Sub {
+  d: string;
+  poly: [number, number][];
+  box: Box;
+  area: number; // absolute polygon area (endpoint approximation)
+  hole: boolean;
+}
+
+interface ParsedPath {
+  tag: string;
+  subs: Sub[];
+}
+
+function polygonOf(outline: string): [number, number][] {
+  const pts: [number, number][] = [];
+  const re = /([MLQ])\s*((?:-?\d+(?:\.\d+)?\s*)+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(outline)) !== null) {
+    const n = m[2].trim().split(/\s+/).map(Number);
+    // For Q the last pair is the end point; the first is a control point.
+    if (n.length >= 2) pts.push([n[n.length - 2], n[n.length - 1]]);
+  }
+  return pts;
+}
+
+function signedArea(poly: [number, number][]): number {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    a += (poly[j][0] + poly[i][0]) * (poly[j][1] - poly[i][1]);
+  }
+  return a / 2;
+}
+
+function parsePath(tag: string): ParsedPath | null {
+  const raw = dOf(tag).trim().split(/(?=M\s)/).map((x) => x.trim()).filter(Boolean);
+  if (raw.length === 0) return null;
+  const subs: Sub[] = [];
+  let outerSign = 0;
+  for (const d of raw) {
+    const poly = polygonOf(d);
+    const box = pathBox(d);
+    if (poly.length < 3 || !box) return null;
+    const sa = signedArea(poly);
+    const sign = Math.sign(sa);
+    if (outerSign === 0) outerSign = sign;
+    subs.push({ d, poly, box, area: Math.abs(sa), hole: sign !== outerSign });
+  }
+  return { tag, subs };
+}
+
+function withD(tag: string, d: string): string {
+  return tag.replace(/\bd="[^"]*"/, `d="${d}"`);
+}
+
+// Drop anything smaller than minSize in BOTH axes (dots), and thin slivers:
+// bbox area under minSize²/3 while the long side is still under minSize×2.
 // Real detail survives either rule: eyes/fangs/text are compact but larger
-// than minSize, and whiskers/strokes are long in at least one axis with
-// real area behind them. Parse each path's coordinate bbox from its d
-// attribute. Pure string/regex work — no DOM needed (runs in the worker
-// callback as well as tests).
+// than minSize, and whiskers/strokes are long in at least one axis. Applied
+// per subpath, so a dropped speck also closes the hole it left in its parent
+// (the parent's color fills it) instead of leaving a page-colored dot.
 function stripSpeckles(svg: string, minSize: number): string {
   const areaLimit = (minSize * minSize) / 3;
   const longLimit = minSize * 2;
-  return svg.replace(/<path\b[^>]*\bd="([^"]*)"[^>]*\/?>/g, (tag, d: string) => {
-    const nums = d.match(/-?\d+(?:\.\d+)?/g);
-    if (!nums || nums.length < 4) return tag;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (let i = 0; i + 1 < nums.length; i += 2) {
-      const x = Number(nums[i]);
-      const y = Number(nums[i + 1]);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    if (!Number.isFinite(minX)) return tag;
-    const w = maxX - minX;
-    const h = maxY - minY;
-    if (w < minSize && h < minSize) return "";
-    if (w * h < areaLimit && Math.max(w, h) < longLimit) return "";
-    return tag;
-  });
-}
-// Merge near-duplicate fills: JPEG ringing splits what the eye reads as one
-// flat color into several palette entries a few units apart (78 lighter-blue
-// islands across an otherwise flat sky; 4 near-identical yellows on one
-// cartoon). Each island then renders as a visible speck even though its shape
-// is "correct". Repaint smaller fills into the nearest larger fill when their
-// RGB distance is under FILL_MERGE_DIST — the islands take the background's
-// exact color and vanish, with zero shapes deleted. One pass, largest-first,
-// so merges always flow toward dominant colors and never chain. Kept at 20
-// (not higher) on purpose: near-white details like shoe-lace highlights sit
-// ~23 units from neighboring cream/pants-white fills and must survive, while
-// JPEG ringing bands sit ~13 units apart and still merge. Distinct hues
-// (white eyes vs yellow, red mouth vs orange light, gray ears vs black) sit
-// far apart and are never touched — only noise-split near-duplicates
-// merge. Only exact `fill="rgb(r,g,b)"` fills participate; anything else
-// (gradients/urls/none) passes through.
-const FILL_MERGE_DIST = 20;
-
-function mergeDuplicateFills(svg: string, dropSize: number): string {
-  const fills = new Map<string, { count: number; area: number; rgb: [number, number, number] }>();
-  const tagRe = /<path\b[^>]*>/g;
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(svg)) !== null) {
-    const tag = m[0];
-    const f = /fill="rgb\((\d+),(\d+),(\d+)\)"/.exec(tag);
-    if (!f) continue;
-    const d = /\bd="([^"]*)"/.exec(tag)?.[1] ?? "";
-    const nums = d.match(/-?\d+(?:\.\d+)?/g);
-    let area = 0;
-    if (nums && nums.length >= 4) {
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (let i = 0; i + 1 < nums.length; i += 2) {
-        const x = Number(nums[i]);
-        const y = Number(nums[i + 1]);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-      if (Number.isFinite(minX)) area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
-    }
-    const key = `rgb(${f[1]},${f[2]},${f[3]})`;
-    const e = fills.get(key);
-    if (e) {
-      e.count += 1;
-      e.area += area;
-    } else {
-      fills.set(key, { count: 1, area, rgb: [Number(f[1]), Number(f[2]), Number(f[3])] });
-    }
-  }
-  if (fills.size < 2) return svg;
-  const ordered = [...fills.entries()].sort((a, b) => b[1].area - a[1].area);
-  const repaint = new Map<string, string>();
-  for (let i = 0; i < ordered.length; i++) {
-    const [key, e] = ordered[i];
-    let best: string | null = null;
-    let bestDist = Number.MAX_SAFE_INTEGER;
-    for (let j = 0; j < i; j++) {
-      const [dkey, d] = ordered[j];
-      const dist =
-        (e.rgb[0] - d.rgb[0]) ** 2 + (e.rgb[1] - d.rgb[1]) ** 2 + (e.rgb[2] - d.rgb[2]) ** 2;
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = dkey;
-      }
-    }
-    if (best !== null && bestDist < FILL_MERGE_DIST * FILL_MERGE_DIST) repaint.set(key, best);
-  }
-  if (repaint.size === 0) return svg;
-  // Single pass over path tags: repaint fills, and drop repainted tags that
-  // are truly tiny. A repainted path now renders the target color; when it is
-  // also tiny it is a former noise island fully inside (or adjacent to) that
-  // same color, so deleting it is visually inert and reclaims the bytes. The
-  // cutoff stays at dropSize (== the speckle threshold, a few px) — anything
-  // bigger stays as a shape, because near-duplicate does not mean identical:
-  // small-but-real details (shoe-lace highlights, stitching) must survive as
-  // geometry even when their color is close to a neighbor's. Large repainted
-  // regions (e.g. a background split in two halves) always stay as shapes.
+  const tiny = (b: Box) => {
+    const w = b.maxX - b.minX;
+    const h = b.maxY - b.minY;
+    return (w < minSize && h < minSize) || (w * h < areaLimit && Math.max(w, h) < longLimit);
+  };
   return svg.replace(/<path\b[^>]*>/g, (tag) => {
-    const f = /fill="(rgb\(\d+,\d+,\d+\))"/.exec(tag);
-    const to = f ? repaint.get(f[1]) : undefined;
-    if (to === undefined) return tag;
-    const repainted = tag.replace(f![0], `fill="${to}"`);
-    const d = /\bd="([^"]*)"/.exec(tag)?.[1] ?? "";
-    const nums = d.match(/-?\d+(?:\.\d+)?/g);
-    if (!nums || nums.length < 4) return repainted;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (let i = 0; i + 1 < nums.length; i += 2) {
-      const x = Number(nums[i]);
-      const y = Number(nums[i + 1]);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    if (!Number.isFinite(minX)) return repainted;
-    if (Math.max(maxX - minX, maxY - minY) < dropSize) return "";
-    return repainted;
+    const parsed = parsePath(tag);
+    if (!parsed) return tag;
+    if (tiny(parsed.subs[0].box)) return "";
+    const kept = parsed.subs.filter((sub, i) => i === 0 || !tiny(sub.box));
+    return kept.length === parsed.subs.length ? tag : withD(tag, kept.map((k) => k.d).join(" "));
   });
 }
-// Seal hairline cracks: adjacent traced paths share mathematically exact
-// boundaries, but curve fitting (ltres/qtres) plus 1-decimal rounding leaves
-// sub-pixel gaps. The white page behind shows through as scattered light
-// specks — most visible where dozens of small fragments tile a region
-// (illustration shading) and at downscaled display sizes, where a 1px crack
-// aliases into bright dots. Painting every path with its own fill color at a
-// hairline width (1 output unit ≈ 0.25 screen px at typical display sizes)
-// overlaps neighbors instead of gapping. Kept at 1, not wider, on purpose:
-// a wider seal bleeds each fill outward, and on fine light-on-dark detail
-// (white shoe highlights inside black) the surrounding dark strokes close
-// over the light shapes and read as "blacks covering the whites".
-// General (no color/shape logic) and helps every image. Only applies to
-// `fill="rgb(...)"` paths; structural markup passes through.
-const CRACK_SEAL_WIDTH = 1;
 
-function sealCracks(svg: string): string {
-  return svg.replace(/<path\b[^>]*>/g, (tag) => {
-    const f = /fill="(rgb\(\d+,\d+,\d+\))"/.exec(tag);
-    if (!f) return tag;
-    // imagetracerjs emits stroke="..." stroke-width="0" (dead weight) — swap
-    // it for a live hairline in the path's own fill color.
-    if (/\sstroke-width="/.test(tag)) {
-      return tag.replace(/\sstroke="[^"]*"/, ` stroke="${f[1]}"`).replace(/\sstroke-width="[^"]*"/, ` stroke-width="${CRACK_SEAL_WIDTH}"`);
+// A hole in one path is "filled" when another region has (nearly) the same
+// outline. Those holes are pure duplicate geometry; unmatched holes reveal
+// whatever was painted underneath and must be kept.
+function isMatch(hole: Sub, region: Sub): boolean {
+  const tol = 2.5;
+  if (Math.abs(hole.box.minX - region.box.minX) > tol || Math.abs(hole.box.maxX - region.box.maxX) > tol) return false;
+  if (Math.abs(hole.box.minY - region.box.minY) > tol || Math.abs(hole.box.maxY - region.box.maxY) > tol) return false;
+  return Math.abs(hole.area - region.area) <= Math.max(6, 0.15 * hole.area);
+}
+
+interface Region {
+  tag: string;
+  outline: Sub;
+  // Holes that are NOT duplicated by another region's outline.
+  openHoles: Sub[];
+  depth: number;
+}
+
+function buildRegions(tags: string[]): Region[] | null {
+  const regions: Region[] = [];
+  const holes: { owner: Region; sub: Sub }[] = [];
+  for (const tag of tags) {
+    const parsed = parsePath(tag);
+    if (!parsed) return null;
+    let current: Region | null = null;
+    for (const sub of parsed.subs) {
+      if (!sub.hole) {
+        current = { tag, outline: sub, openHoles: [], depth: 0 };
+        regions.push(current);
+      } else if (current) {
+        holes.push({ owner: current, sub });
+      }
     }
-    return tag.replace(/<path\b/, `<path stroke="${f[1]}" stroke-width="${CRACK_SEAL_WIDTH}"`);
+  }
+  for (const { owner, sub } of holes) {
+    const matched = regions.some((r) => r !== owner && isMatch(sub, r.outline));
+    if (!matched) owner.openHoles.push(sub);
+  }
+  return regions;
+}
+
+function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+const MAX_STACKED_REGIONS = 3000;
+
+// Shape stacking. Tiles with cut-out holes meet their neighbors along two
+// independently anti-aliased edges, so a hairline of page shows through (the
+// seams). Regions nest or are disjoint, so painting each region's OUTER
+// outline, containers before contents, renders the same picture with each
+// edge blended against its true neighbor instead of the page. Holes that no
+// other region fills are kept (they reveal what is underneath).
+// Fully opaque artwork only: with transparency or translucent fills a hole may
+// be genuinely see-through, and stacking would fill it.
+function stackShapes(svg: string): string {
+  const start = svg.indexOf("<path");
+  const end = svg.lastIndexOf("</svg>");
+  if (start < 0 || end < 0) return svg;
+  const tags = svg.slice(start, end).match(/<path\b[^>]*>/g);
+  if (!tags || tags.length < 2) return svg;
+  if (tags.some((t) => HAS_OPACITY.test(t))) return svg;
+  const regions = buildRegions(tags);
+  if (!regions || regions.length > MAX_STACKED_REGIONS) return svg;
+
+  // depth = how many other regions enclose this one.
+  for (const a of regions) {
+    const [px, py] = a.outline.poly[0];
+    for (const b of regions) {
+      if (a === b) continue;
+      const ab = a.outline.box;
+      const bb = b.outline.box;
+      if (ab.minX < bb.minX || ab.maxX > bb.maxX || ab.minY < bb.minY || ab.maxY > bb.maxY) continue;
+      if (pointInPolygon(px, py, b.outline.poly)) a.depth += 1;
+    }
+  }
+  const ordered = regions
+    .map((r, index) => ({ r, index }))
+    .sort((x, y) => x.r.depth - y.r.depth || y.r.outline.area - x.r.outline.area || x.index - y.index)
+    .map(({ r }) => withD(r.tag, [r.outline.d, ...r.openHoles.map((h) => h.d)].join(" ")));
+  return svg.slice(0, start) + ordered.join("") + svg.slice(end);
+}
+
+// imagetracerjs writes stroke="…" stroke-width="0" on every path: a zero-width
+// stroke never renders, so it is dead weight when we aren't sealing cracks.
+function stripDeadStrokes(svg: string): string {
+  return svg.replace(/\s*stroke="[^"]*"\s*stroke-width="0"/g, "");
+}
+
+// Paths the tracer emits for fully transparent regions paint nothing.
+function dropInvisiblePaths(svg: string): string {
+  return svg.replace(/<path\b[^>]*\sopacity="0(?:\.0+)?"[^>]*>/g, "");
+}
+
+// opacity="0.9019607843137255" -> 0.902. Three decimals is finer than 8-bit
+// alpha can express, so the rendering is identical.
+function roundOpacity(svg: string): string {
+  return svg.replace(/\sopacity="([\d.]+)"/g, (_m, v: string) => ` opacity="${Number(Number(v).toFixed(3))}"`);
+}
+
+function hex2(n: number): string {
+  return n.toString(16).padStart(2, "0");
+}
+
+// rgb(255,255,255) -> #fff. Lossless: only exact conversions.
+function compactColors(svg: string): string {
+  return svg.replace(/(fill|stroke)="rgb\((\d+),(\d+),(\d+)\)"/g, (_m, attr: string, r: string, g: string, b: string) => {
+    const full = `${hex2(Number(r))}${hex2(Number(g))}${hex2(Number(b))}`;
+    const short = full[0] === full[1] && full[2] === full[3] && full[4] === full[5] ? `${full[0]}${full[2]}${full[4]}` : full;
+    return `${attr}="#${short}"`;
   });
 }
-// Snap the largest fill back to the source's exact dominant color.
-// imagetracerjs averages each palette entry over its member pixels, which on
-// a large flat background drifts a few units per channel — on near-white
-// milky fills that drift reads as a green/teal tint next to the original.
-// The dominant true-mean (measured from source pixels, see
-// presets.dominantMeanColor) is the ground truth for that background: when
-// the largest traced fill is already near it (< 60 units), repaint it
-// exactly. Far-apart fills (e.g. a black background traced while the
-// dominant sample caught a white border) are left untouched.
-function snapLargestFillToDominant(svg: string, dominant: [number, number, number]): string {
-  const areas = new Map<string, number>();
-  const tagRe = /<path\b[^>]*>/g;
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(svg)) !== null) {
-    const tag = m[0];
-    const f = /fill="rgb\((\d+),(\d+),(\d+)\)"/.exec(tag);
+
+// Monochrome: the tracer paints a stack of two-class regions (ink over
+// background, with "holes" only implied by later, lighter paint). Convert that
+// into ONE real compound path so holes are true holes (transparent on any
+// background) and the result recolors in a single click.
+//
+// Regions in a two-class trace strictly alternate as they nest, so drawing
+// every region's OUTER boundary once with the even-odd rule reproduces the
+// artwork exactly. The outermost background region(s) — light regions that
+// touch the image frame — are the "page" and are skipped.
+function compileMonochrome(svg: string): string {
+  const open = /<svg\b[^>]*>/.exec(svg)?.[0];
+  if (!open) return svg;
+  const w = Number(/\swidth="([\d.]+)"/.exec(open)?.[1]);
+  const h = Number(/\sheight="([\d.]+)"/.exec(open)?.[1]);
+  const tags = svg.match(/<path\b[^>]*>/g) ?? [];
+  const regions = buildRegions(tags);
+  if (!regions) return svg;
+  const outlines: string[] = [];
+  for (const r of regions) {
+    const f = RGB_FILL.exec(r.tag);
     if (!f) continue;
-    const d = /\bd="([^"]*)"/.exec(tag)?.[1] ?? "";
-    const nums = d.match(/-?\d+(?:\.\d+)?/g);
-    let area = 0;
-    if (nums && nums.length >= 4) {
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (let i = 0; i + 1 < nums.length; i += 2) {
-        const x = Number(nums[i]);
-        const y = Number(nums[i + 1]);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-      if (Number.isFinite(minX)) area = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+    const lum = 0.299 * Number(f[1]) + 0.587 * Number(f[2]) + 0.114 * Number(f[3]);
+    if (lum >= 128) {
+      const b = r.outline.box;
+      const touchesFrame = b.minX <= 0.01 || b.minY <= 0.01 || b.maxX >= w - 0.01 || b.maxY >= h - 0.01;
+      if (touchesFrame) continue;
     }
-    const key = `rgb(${f[1]},${f[2]},${f[3]})`;
-    areas.set(key, (areas.get(key) ?? 0) + area);
+    outlines.push(r.outline.d, ...r.openHoles.map((x) => x.d));
   }
-  let largestKey: string | null = null;
-  let largestArea = 0;
-  let largestRgb: [number, number, number] | null = null;
-  for (const [key, area] of areas) {
-    if (area > largestArea) {
-      largestArea = area;
-      largestKey = key;
-      const parts = /rgb\((\d+),(\d+),(\d+)\)/.exec(key);
-      if (parts) largestRgb = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
-    }
-  }
-  if (!largestKey || !largestRgb) return svg;
-  const dist = Math.sqrt(
-    (largestRgb[0] - dominant[0]) ** 2 +
-      (largestRgb[1] - dominant[1]) ** 2 +
-      (largestRgb[2] - dominant[2]) ** 2
-  );
-  if (dist >= 60) return svg;
-  const exact = `rgb(${dominant[0]},${dominant[1]},${dominant[2]})`;
-  if (`rgb(${largestRgb[0]},${largestRgb[1]},${largestRgb[2]})` === exact) return svg;
-  return svg.split(`fill="${largestKey}"`).join(`fill="${exact}"`).split(`stroke="${largestKey}"`).join(`stroke="${exact}"`);
+  const body = outlines.length > 0 ? `<path fill="#000" fill-rule="evenodd" d="${outlines.join(" ")}"/>` : "";
+  return `${open}${body}</svg>`;
 }
-// Strips output that imagetracerjs emits but that has zero visual effect —
-// verified byte-for-byte inert, never touches path geometry or fill colors:
-//   - `desc="Created with imagetracer.js..."` — authoring metadata only.
-//   - `opacity="1"` — 1 is the SVG default; omitting it renders identically.
-// (Zero-width strokes are NOT stripped here — sealCracks repurposes them as
-// live hairlines, see above.)
-// Plus four fidelity passes (stripSpeckles, mergeDuplicateFills,
-// snapLargestFillToDominant, sealCracks) that intentionally alter output:
-// micro-path deletion, near-duplicate fill unification, background-color
-// snapping, and crack sealing. All geometry/color-conservative —
-export function optimizeSvg(svg: string, dominant?: [number, number, number] | null): string {
-  const cleaned = addViewBox(svg)
+
+export function optimizeSvg(svg: string, input: OptimizeInput): string {
+  const { cleanup } = input;
+  let out = addViewBox(svg)
     .replace(/\s*desc="[^"]*"/g, "")
     .replace(/\s*opacity="1"(?=[\s/>])/g, "");
-  // Scale speckle threshold to output size: ~0.5% of the longest side,
-  // clamped 4–8px. On a 1500px illustration that drops sub-8px noise dots
-  // while keeping real small details (shoe-lace highlights, eyelets,
-  // stitching are typically 6px+ in at least one axis; whiskers/strokes are
-  // long in one axis with real area). The old 0.8%/12px cutoff ate those
-  // highlights, leaving the dark surroundings to cover them.
-  const w = /<svg\b[^>]*\swidth=['"]([\d.]+)['"]/.exec(cleaned)?.[1];
-  const h = /<svg\b[^>]*\sheight=['"]([\d.]+)['"]/.exec(cleaned)?.[1];
-  const longest = Math.max(Number(w) || 0, Number(h) || 0);
-  const minSize = longest > 0 ? Math.min(8, Math.max(4, longest * 0.005)) : 6;
-  // dropSize == minSize: only delete a repainted path when it is truly tiny.
-  // Anything bigger stays as geometry (see mergeDuplicateFills comment).
-  const merged = mergeDuplicateFills(stripSpeckles(cleaned, minSize), minSize);
-  const snapped = dominant ? snapLargestFillToDominant(merged, dominant) : merged;
-  return sealCracks(snapped);
+  out = roundOpacity(dropInvisiblePaths(out));
+
+  if (cleanup.monochrome) {
+    out = compileMonochrome(out);
+    return cleanup.compactColors ? compactColors(out) : out;
+  }
+
+  const sp = cleanup.speckle;
+  if (sp && input.flat) {
+    const wAttr = /<svg\b[^>]*\swidth=['"]([\d.]+)['"]/.exec(out)?.[1];
+    const hAttr = /<svg\b[^>]*\sheight=['"]([\d.]+)['"]/.exec(out)?.[1];
+    const longest = Math.max(Number(wAttr) || 0, Number(hAttr) || 0);
+    const minSize = longest > 0 ? Math.min(sp.max, Math.max(sp.min, longest * sp.fraction)) : (sp.min + sp.max) / 2;
+    out = stripSpeckles(out, minSize);
+  }
+  if (cleanup.stackShapes && !input.hasTransparency) out = stackShapes(out);
+  out = stripDeadStrokes(out);
+  if (cleanup.compactColors) out = compactColors(out);
+  return out;
 }
