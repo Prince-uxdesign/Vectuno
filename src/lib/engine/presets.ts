@@ -92,7 +92,7 @@ const MAX_COLORS = 64;
 // really only have 4-6 colors, which reads as speckles + dull washed-out
 // fills. Fewer palette slots forces those bands to merge into the dominant
 // colors, which is exactly what flat illustration needs.
-const DEFAULT_COLORS = 20;
+export const DEFAULT_COLORS = 20;
 
 function clampColors(n: number): number {
   return Math.min(MAX_COLORS, Math.max(MIN_COLORS, Math.round(n)));
@@ -105,6 +105,17 @@ function clampColors(n: number): number {
 // JPEG ringing while still separating real fills (yellow vs black vs white
 // vs red are far apart). Sampled stride keeps it cheap on 2000px images.
 export function estimatePaletteSize(data: Uint8ClampedArray): number {
+  const need = countDominantBins(data);
+  if (need <= 6) return 8;
+  if (need <= 10) return 12;
+  if (need <= 18) return 16;
+  return DEFAULT_COLORS;
+}
+
+// Shared dominant-bin count: how many coarse color bins cover 97% of sampled
+// opaque pixels. Single source of truth for both palette sizing and
+// pre-quantization width below.
+export function countDominantBins(data: Uint8ClampedArray): number {
   const counts = new Map<number, number>();
   let total = 0;
   const stride = 16;
@@ -114,7 +125,7 @@ export function estimatePaletteSize(data: Uint8ClampedArray): number {
     counts.set(key, (counts.get(key) ?? 0) + 1);
     total += 1;
   }
-  if (total === 0) return DEFAULT_COLORS;
+  if (total === 0) return Number.MAX_SAFE_INTEGER;
   const sorted = [...counts.values()].sort((a, b) => b - a);
   let covered = 0;
   let need = 0;
@@ -123,10 +134,74 @@ export function estimatePaletteSize(data: Uint8ClampedArray): number {
     need += 1;
     if (covered / total >= 0.97) break;
   }
-  if (need <= 4) return 8;
-  if (need <= 8) return 12;
-  if (need <= 16) return 16;
-  return DEFAULT_COLORS;
+  return need;
+}
+
+// Deterministic pre-quantization: snap every opaque pixel to the nearest of
+// the K most frequent coarse-bin centers, where K tracks the dominant-bin
+// count (need + margin, clamped 8–16). JPEG ringing around flat fills then
+// collapses back into the real fills BEFORE the tracer's grid-seeded palette
+// sampling ever sees it — small-but-distinct colors (white eyes at 1.4%,
+// mouth red at 0.2%) survive because they're far in RGB space, while noise
+// near yellow/black gets absorbed. Transparent pixels pass through untouched.
+// Runs on the worker's pixel copy; the caller's buffer is never mutated.
+export function quantizeToDominant(data: Uint8ClampedArray, k: number): Uint8ClampedArray {
+  const counts = new Map<number, number>();
+  const stride = 16;
+  for (let i = 0; i < data.length; i += 4 * stride) {
+    if (data[i + 3] < 128) continue;
+    const key = ((data[i] >> 4) << 12) | ((data[i + 1] >> 4) << 8) | ((data[i + 2] >> 4) << 4);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const palette = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, Math.max(1, k))
+    .map(([key]) => [((key >> 12) & 15) * 16 + 8, ((key >> 8) & 15) * 16 + 8, ((key >> 4) & 15) * 16 + 8]);
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a < 128) {
+      out[i] = 0;
+      out[i + 1] = 0;
+      out[i + 2] = 0;
+      out[i + 3] = 0;
+      continue;
+    }
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    let best = 0;
+    let bestDist = Number.MAX_SAFE_INTEGER;
+    for (let p = 0; p < palette.length; p++) {
+      const dr = r - palette[p][0];
+      const dg = g - palette[p][1];
+      const db = b - palette[p][2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    }
+    out[i] = palette[best][0];
+    out[i + 1] = palette[best][1];
+    out[i + 2] = palette[best][2];
+    out[i + 3] = 255;
+  }
+  return out;
+}
+
+// Width used for pre-quantization: dominant count + margin for small accents,
+// clamped so photos (need in the hundreds) don't build giant palettes.
+// Never a perfect square: imagetracerjs seeds its palette from a
+// sqrt(n)-by-sqrt(n) spatial grid, and exact squares (9 = 3x3, 16 = 4x4)
+// systematically miss small regions (same pathology documented for 16 in
+// types/index.ts) — white eyes vanish while noise survives.
+export function quantizationWidth(data: Uint8ClampedArray): number {
+  const need = countDominantBins(data);
+  let k = Math.min(16, Math.max(10, need + 5));
+  const root = Math.sqrt(k);
+  if (Number.isInteger(root)) k = k === 16 ? 15 : Math.min(16, k + 1);
+  return k;
 }
 
 export function buildImageTracerOptions(
