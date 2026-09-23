@@ -2,9 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fffcfa" />
+    <meta
+      name="description"
+      content="Turn PNG, JPG, or WebP images into scalable SVG vectors — converted entirely in your browser. Nothing is uploaded to a server."
+    />
     <title>Vectuno — Image to Vector</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Vectuno — Image to Vector" />
+    <meta
+      property="og:description"
+      content="Turn PNG, JPG, or WebP images into scalable SVG vectors — converted entirely in your browser. Nothing is uploaded to a server."
+    />
+    <meta property="og:image" content="%BASE_URL%favicon.svg" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Vectuno — Image to Vector" />
+    <meta
+      name="twitter:description"
+      content="Turn PNG, JPG, or WebP images into scalable SVG vectors — converted entirely in your browser. Nothing is uploaded to a server."
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,6 +32,7 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>This app requires JavaScript to convert images in your browser.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

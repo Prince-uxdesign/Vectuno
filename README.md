@@ -1,10 +1,10 @@
 # Vectuno — Image to Vector Converter
 
-Client-side PNG/JPG/JPEG/WebP → SVG converter. The full core conversion
-journey is implemented — upload → preview → configure → convert → preview
-result → download — with a polished, black-and-white, editorial design
-system and a real landing/upload experience. No auth, no backend, no
-accounts.
+Client-side PNG/JPG/JPEG/WebP → SVG converter. The full journey is
+implemented — upload → preview → configure → convert → compare result →
+download — for both a single image and a multi-file batch, with a warm,
+Strawberry-inspired design system. Everything runs in the browser: no auth,
+no backend, no accounts, nothing uploaded to a server.
 
 See [`docs/vectorization-evaluation.md`](docs/vectorization-evaluation.md)
 for the engine evaluation (why `imagetracerjs`, why not `vtracer-wasm`) and
@@ -12,48 +12,56 @@ the underlying conversion-quality test results.
 
 ## Design system
 
-Strict black/white + a 4-step neutral gray scale, spacing/radius/motion
-tokens, all defined once in `src/index.css` under `:root`:
+A warm off-white system — ink instead of pure black, cream instead of pure
+white, coral reserved as a punctuation accent rather than a UI-wide color —
+plus spacing/radius/motion tokens, all defined once in `src/index.css` under
+`:root`:
 
 ```
---black / --white
---gray-100 (very light) / --gray-300 (light) / --gray-500 (medium) / --gray-700 (dark)
+--ink / --canvas / --cream / --surface-white     text / page bg / card bg / elevated bg
+--border-soft / --border-firm                    hairlines
+--muted-warm / --coral / --coral-pressed / --error
 --space-1 … --space-9        4px base scale
---radius-sm/md/lg            4/8/12px — never pill-shaped
---duration-fast/base         120/200ms, cubic-bezier(0.4,0,0.2,1)
-                              collapsed to 0ms under prefers-reduced-motion
+--radius-sm/md/lg            never pill-shaped
+--duration-fast/base         collapsed to 0ms under prefers-reduced-motion
 ```
 
 Reusable UI primitives live in `src/components/ui/` (`Button`, `Container`,
-`Section`) plus `Logo`, `Navigation`, and `FileTypeHint` at the top level.
-`Button` has real default/hover/focus-visible/active/disabled states — see
-"A cascade bug worth knowing about" below for a real mistake this caught.
+`Section`) plus `Logo`, `Navigation`, `Footer`, and `FileTypeHint` at the top
+level. `Button` has real default/hover/focus-visible/active/disabled states.
 
 ## Stack
 
 React + TypeScript + Vite. Vectorization via [`imagetracerjs`](https://github.com/jankovicsandras/imagetracerjs),
-run inside a Web Worker so the UI thread never blocks. No backend, no
-database, no accounts.
+run inside a Web Worker so the UI thread never blocks. Zip packaging for
+batch downloads via [`fflate`](https://github.com/101arrowz/fflate). No
+backend, no database, no accounts.
 
 ## State model
 
-The whole app is driven by one explicit `Stage` (`src/types/index.ts`),
-managed with `useReducer` in `src/state/useConverter.ts` — no scattered
+Two parallel state machines, each an explicit `useReducer`, no scattered
 booleans:
 
-```
-empty → dragActive → fileSelected → preparing → ready → converting → success
-                                         ↓            ↑        ↓
-                                       error ──────────┴────────┘
-                                     (cancel returns converting → ready directly,
-                                      not through error — see Cancellation below)
-```
+- **Single file** — `src/state/useConverter.ts`, driven by one `Stage`
+  (`src/types/index.ts`):
 
-`error` carries a `message`, `hint` (the actionable next step, e.g. "Try a
-smaller image"), and `recovery` (`"retry"` vs `"chooseNew"`) so the UI always
-offers the right next action: a conversion failure keeps the file and
-settings on screen with a "Try again" button; an upload/validation failure
-shows "Choose a different image" since the file itself is the problem.
+  ```
+  empty → dragActive → fileSelected → preparing → ready → converting → success
+                                           ↓            ↑        ↓
+                                         error ──────────┴────────┘
+                                       (cancel returns converting → ready directly,
+                                        not through error — see Cancellation below)
+  ```
+
+  `error` carries a `message`, `hint` (the actionable next step, e.g. "Try a
+  smaller image"), and `recovery` (`"retry"` vs `"chooseNew"`) so the UI
+  always offers the right next action.
+
+- **Batch** — `src/state/useBatchConverter.ts`, an array of per-item states
+  (`queued` / `converting` / `done` / `error`) processed one at a time (see
+  "Batch conversion" below). The app renders one or the other: dropping 2+
+  files switches the whole screen to the batch workspace; a single file uses
+  the single-image flow above.
 
 ## Conversion settings
 
@@ -63,54 +71,66 @@ Three core settings, mapped to `imagetracerjs` parameters that were verified
 | Setting | User sees | Engine parameter | Verified effect |
 |---|---|---|---|
 | Mode | Color / Monochrome | `numberofcolors` (2 vs. user value) | obvious |
-| Detail | Low / Medium / High | `pathomit` (30 / 8 / 1) | path count only — which shapes survive |
+| Detail | Low / Medium / High | `pathomit` (40 / 16 / 4) | path count only — which shapes survive |
 | Smoothness | Low / Medium / High | `ltres`/`qtres` (0.2 / 1 / 4) | file size only, same path count — curve simplification |
 
-Detail and Smoothness were deliberately re-derived this phase after testing
-showed the original mapping was wrong: `pathomit` and `ltres`/`qtres` were
-both lumped under "Detail," and a candidate "Smoothness" built on
-`blurradius` actually *increased* path count on flat art (pre-blur
-anti-aliasing gets quantized into extra color bands) — the opposite of what
-"smoothness" should do. Blurring was cut entirely rather than shipped as a
-control that sometimes makes output worse. The current mapping keeps Detail
-and Smoothness independent: Detail changes *what* gets traced, Smoothness
-changes *how* the curves are fit, and `scripts/benchmark-settings.mjs`
-asserts that relationship holds (monotonic path count for Detail, monotonic
-size for Smoothness) on every run.
+Detail and Smoothness are kept independent: Detail changes *what* gets
+traced, Smoothness changes *how* the curves are fit, and
+`scripts/benchmark-settings.mjs` asserts that relationship holds (monotonic
+path count for Detail, monotonic size for Smoothness) on every run.
 
 **Advanced** (collapsed `<details>`, Color mode only): a 2–64 "Colors" slider
-(`numberofcolors` directly). This is the one continuous/technical control
-still exposed — kept out of the core three because the brief's settings list
-doesn't include it, but it's real and worth keeping for users who want finer
-control than three color-mode-adjacent buckets.
+(`numberofcolors` directly, clamped in `presets.ts`). When left at the
+default 20, flat art is adapted down automatically (`estimatePaletteSize`:
+images needing ≤4 dominant colors trace with 8) — a fixed 20 keeps JPEG
+ringing and antialiased edge bands as separate dull palette entries on
+4-color cartoons. An explicit slider choice always wins over the heuristic.
 
 **Not implemented: Background Keep/Remove.** `imagetracerjs` has no
 background-detection or removal capability — it traces whatever pixels are
-there, preserving existing alpha as per-path opacity. Building real
-background removal would mean writing new segmentation logic, not mapping an
-existing engine parameter, which is out of scope for "map the engine's
-parameters to friendly controls." Skipped per "only expose settings that
-genuinely work," not shipped as a no-op toggle.
+there, preserving existing alpha as per-path opacity.
 
-**Defaults:** Mode=Color, Detail=Medium, Smoothness=Medium, Colors=16 —
-tested to work well across the fixture set without any adjustment.
+**Defaults:** Mode=Color, Detail=Medium, Smoothness=Medium, Colors=20. 20
+rather than a round 16 for an engine-specific reason (imagetracerjs's grid
+palette sampling) — see the comment on `createDefaultOptions` in
+`src/types/index.ts`.
+
+## Batch conversion
+
+Dropping or picking more than one file switches to `BatchWorkspace`
+(`src/state/useBatchConverter.ts`, `src/components/BatchWorkspace.tsx`):
+queue, remove-while-queued, one shared settings panel, sequential
+processing (bounded memory — one decoded image at a time regardless of
+batch size), per-item download, and a "Download all as .zip" once at least
+one item finishes. Options are snapshotted at the moment "Start" is
+pressed, so changing a setting mid-run can't produce a batch with mixed
+settings.
 
 ## Processing state & cancellation
 
 `imagetracerjs`'s `imagedataToSVG` is a single synchronous call with no
-internal yield points or progress hook (confirmed in the Phase 1 engine
-evaluation) — so only two stages are real and honestly reportable:
-**"Preparing image"** (decode) and **"Vectorizing your image"** (the worker
-call). Fabricated intermediate stages ("Analyzing," "Tracing," "Optimizing")
-were deliberately not added — there's no way to know which is actually
-happening inside an opaque synchronous call.
+internal yield points or progress hook — so only two stages are real and
+honestly reportable: **"Preparing image"** (decode) and **"Vectorizing your
+image"** (the worker call). No fabricated intermediate stages.
 
 Cancellation is real, not cosmetic: each conversion runs in its own
 freshly-created Worker (see `vectorizeClient.ts`), so cancelling just calls
-`AbortController.abort()`, which terminates that worker outright. Since
-nothing is shared between conversions, terminating mid-run can't corrupt
-state — the same mechanism the 30s timeout already used. Cancelling returns
-straight to `ready` (not `error`): it isn't a failure.
+`AbortController.abort()`, which terminates that worker outright. Cancelling
+returns straight to `ready` (not `error`) — it isn't a failure.
+
+## Other conversion-result features
+
+- **Compare slider** (`CompareSlider`) — drag to reveal original vs.
+  vectorized result side by side.
+- **Copy SVG to clipboard** (`CopySvgButton`) alongside the download button.
+- **Raster export** (`RasterExportButtons` / `lib/utils/rasterExport.ts`) —
+  export the result as PNG or JPEG, rendered from the SVG on a canvas
+  (capped at 4096px per side, 2x source resolution).
+- **SVG post-processing** (`lib/engine/optimizeSvg.ts`) — adds a `viewBox`
+  (imagetracerjs emits only `width`/`height`), strips inert
+  metadata/zero-width-stroke/`opacity="1"` attributes. Conservative on
+  purpose: no path simplification or coordinate rounding beyond what
+  imagetracerjs already applies.
 
 ## Project structure
 
@@ -119,15 +139,18 @@ src/
   types/            Stage, AppError (+ ErrorRecovery), ConversionOptions, etc.
   lib/
     image/          validate.ts (MIME + extension fallback + size),
-                     decode.ts (createImageBitmap → canvas → downsample, dimension check)
+                     decode.ts (createImageBitmap → canvas → downsample, dimension check),
+                     transparency.ts
     engine/         presets.ts (options → imagetracerjs config), vectorize.worker.ts,
-                     vectorizeClient.ts (worker wrapper w/ timeout + typed errors)
-    utils/          filename.ts (download filename derivation + sanitization)
-  state/            useConverter.ts — the whole pipeline as one reducer
+                     vectorizeClient.ts (worker wrapper w/ timeout + typed errors),
+                     optimizeSvg.ts (viewBox + dead-attribute cleanup)
+    utils/          filename.ts, download.ts, rasterExport.ts, zip.ts, format.ts
+  state/            useConverter.ts (single file), useBatchConverter.ts (batch),
+                     useRotatingFact.ts (ConversionLoader fact rotation)
   components/
     ui/                 Button, Container, Section — the shared primitives
-    Navigation, Logo    sticky header; nav links collapse to Logo+CTA <640px
-                        (no hamburger — see design notes)
+    Navigation, Footer, Logo    sticky header; nav links collapse to Logo+CTA
+                        <640px, with footer nav links as the mobile fallback
     HowItWorks          3-step landing content, also the #how-it-works nav target
     UploadZone          click / drag-drop / mobile picker; distinguishes a
                         valid vs. unsupported drag (icon + text, not color alone)
@@ -135,13 +158,15 @@ src/
     FileMetadata           name / type / size / dimensions
     ConversionSettings     Mode/Detail/Smoothness (segmented, checkmark + bold
                            on selection, not color alone) + collapsed Advanced
-    ConversionStatus       headline+subtext status, Convert trigger, Cancel
-                           button while converting
-    ResultPreview           original + SVG side-by-side + SVG stats
-    DownloadButton          derives "name.svg" from the source filename
-    ErrorState              icon + message + hint (what happened / what to do)
-                           + recovery-appropriate action(s)
-  App.tsx           Composes everything off `state.stage`
+    ConversionStatus       headline+subtext status, Convert trigger
+    ConversionLoader       dedicated "converting" screen with rotating facts
+    ResultPreview           CompareSlider + result metadata + actions
+    ResultMetadata          SVG size / path count / elapsed time
+    DownloadButton, CopySvgButton, RasterExportButtons
+    BatchWorkspace          queue, per-item status/download, zip-all
+    ErrorState              icon + message + hint + recovery-appropriate action(s)
+    RootErrorBoundary       last-resort render-error fallback (see src/main.tsx)
+  App.tsx           Composes single-file vs. batch vs. landing off both hooks' state
 scripts/            Test fixture generation, benchmark, e2e/visual probes
 docs/               Technical evaluation
 test/fixtures/      Synthetic test images (generated, checked in — tiny)
@@ -157,35 +182,33 @@ npm run dev
 ## Testing
 
 ```
-npm run test:fixtures    # regenerate test/fixtures/*.png|jpg|webp (12 categories)
-npm run test:benchmark   # run imagetracerjs against all fixtures, print size/paths/time
-npm run test:settings    # verify Detail/Smoothness are monotonic on real fixtures
-                         # (fails the build if a future preset change breaks that)
-npm run test:e2e         # full user-journey suite: 143 assertions across 7 image
-                         # types, 9 breakpoints, keyboard/touch, rejection/corruption/
-                         # timeout errors, replace-image, sequential conversions,
-                         # settings-changes-output, Advanced disclosure, cancellation,
-                         # no-accidental-auto-convert
-npm run test:visual      # screenshots + real DataTransfer drag events,
-                         # long-filename overflow, disabled-state checks
-npm run test:design      # full-page landing screenshots at all 10 required
-                         # breakpoints (320–1920px)
+npm run test:fixtures       # regenerate test/fixtures/*.png|jpg|webp (15 fixtures,
+                             # including a webp source, a corrupted file, and an
+                             # oversized-dimensions file for error-path coverage)
+npm run test:benchmark      # run imagetracerjs against all fixtures, print size/paths/time
+npm run test:settings       # verify Detail/Smoothness are monotonic on real fixtures
+                             # (fails the build if a future preset change breaks that)
+npm run test:e2e            # single-file user-journey suite: upload, convert, cancel,
+                             # errors, settings changes, keyboard/touch, breakpoints
+npm run test:e2e-batch      # batch-specific journey: multi-file queue, remove, zip
+npm run test:e2e-stress     # forced-failure / flaky-worker resilience checks
+npm run test:visual         # screenshots + real DataTransfer drag events,
+                             # long-filename overflow, disabled-state checks
+npm run test:design         # full-page landing screenshots at all required breakpoints
+npm run test:responsive     # computed-style responsive audit across breakpoints
+npm run test:responsive-shots
 ```
 
-`test:e2e`, `test:visual`, and `test:design` all require the dev server
-running separately first:
+`test:e2e*`, `test:visual`, `test:design`, and `test:responsive*` all require
+the dev server running separately first:
 
 ```
 npx vite --port 5185
 ```
 
 All of the above run against a real, unmodified build of the app in actual
-Chromium — nothing is mocked except two deliberately-forced conditions in
-`e2e-full.mjs`: a `Worker.postMessage` override to verify the error UI
-without needing to organically break a working vectorizer, and a delayed
-`postMessage` to open a real window to cancel in.
-
-Playwright is a devDependency only — it never ships in the app bundle.
+Chromium. Playwright is a devDependency only — it never ships in the app
+bundle.
 
 ## A TypeScript gotcha worth knowing about
 
@@ -193,22 +216,9 @@ Playwright is a devDependency only — it never ships in the app bundle.
 `tsconfig.json` has `"files": []` and delegates to `tsconfig.app.json` /
 `tsconfig.node.json` via project references, which plain `tsc` doesn't
 follow. It exits 0 even with real type errors sitting in modified files.
-Caught this the hard way mid-phase: a type error survived several
-`tsc --noEmit` "clean" checks in a row. Use `npx tsc -b --noEmit` (build
-mode, follows references) or just `npm run build` — never bare
-`tsc --noEmit` — when verifying this project actually typechecks.
-
-## A cascade bug worth knowing about
-
-The base `.btn` class originally hard-coded `flex: 1; min-width: 140px` (it
-needs to grow when two buttons sit side-by-side in `.workspace__actions`).
-When `Button` was reused for the nav's "Start converting" CTA, that rule
-made it stretch to fill the entire header — found by actually looking at a
-screenshot, not assumed away. The real fix wasn't a specificity hack: `flex:
-1` moved out of `.btn` entirely and onto `.workspace__actions .btn` /
-`.error-state__actions .btn`, since growing-to-fill is the parent layout's
-decision, not an intrinsic property of a button. Worth remembering when
-adding new `Button` usages outside those two containers.
+Use `npx tsc -b --noEmit` (build mode, follows references) or just
+`npm run build` — never bare `tsc --noEmit` — when verifying this project
+actually typechecks.
 
 ## Known limitations
 
@@ -218,16 +228,16 @@ engine-level limits (photographs are a poor fit, gradients get posterized).
 
 Product-level, as of this phase:
 
-- No SVG post-optimization pass (e.g. SVGO) — output is `imagetracerjs`'s raw
-  SVG.
+- No SVG post-optimization pass beyond `optimizeSvg.ts`'s conservative
+  cleanup (e.g. no SVGO-style path simplification).
 - No true progress percentage or intermediate stages during conversion — the
-  engine has no progress hook, so `ConversionStatus` shows two honest stages
-  (Preparing / Vectorizing) with an indeterminate spinner, not a fabricated
-  percentage or made-up steps like "Analyzing" / "Optimizing."
-- No batch/multi-file upload — one image at a time, by design for this phase.
+  engine has no progress hook, so the UI shows two honest stages (Preparing /
+  Vectorizing) with an indeterminate spinner.
 - No Background Keep/Remove setting — `imagetracerjs` has no background
   detection/removal capability to map; see "Conversion settings" above.
+- No automatic photo-vs-illustration detection — a photographic source will
+  still trace (and often produce a very large SVG); the settings/hint copy
+  doesn't yet warn the user before they hit Convert.
 - "How it works" and "About" are anchors on the same page, not separate
-  routes — intentional, since this isn't a multi-page product. Nav collapses
-  to just Logo + "Start converting" below 640px rather than adding a
-  hamburger menu for two links.
+  routes. The header nav collapses to Logo + "Start converting" below 640px;
+  the footer carries the same two links as a mobile-only fallback.

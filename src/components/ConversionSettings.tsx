@@ -1,4 +1,5 @@
 import type { ConversionOptions, Level } from "../types";
+import { CheckmarkIcon } from "./icons/CheckmarkIcon";
 
 interface ConversionSettingsProps {
   options: ConversionOptions;
@@ -38,18 +39,7 @@ function Segmented<T extends string>({
               className={isActive ? "is-active" : ""}
               onClick={() => onChange(opt)}
             >
-              {isActive && (
-                <svg className="segmented__check" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-                  <path
-                    d="M3.5 8.5L6.5 11.5L12.5 4.5"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </svg>
-              )}
+              {isActive && <CheckmarkIcon className="segmented__check" />}
               {labels[opt]}
             </button>
           );

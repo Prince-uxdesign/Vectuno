@@ -9,11 +9,17 @@ function getExtension(filename: string): string {
   return match ? match[0].toLowerCase() : "";
 }
 
+// Some OS/browser file pickers and drag sources report this generic
+// fallback MIME for files they can't identify, even for genuine images —
+// treat it like "no MIME" and fall back to the extension instead of
+// rejecting a valid image outright.
+const GENERIC_MIME = "application/octet-stream";
+
 export function validateFile(file: File): void {
   const mime = file.type;
   const isAcceptedMime = ACCEPTED_MIME_TYPES.includes(mime as (typeof ACCEPTED_MIME_TYPES)[number]);
 
-  if (mime) {
+  if (mime && mime !== GENERIC_MIME) {
     // MIME is present: it's the authoritative signal. A mismatched extension
     // (e.g. a mislabeled .txt renamed to .png) does NOT get a pass here —
     // decodability is checked separately and will still catch real corruption.

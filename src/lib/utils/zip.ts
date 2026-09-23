@@ -20,6 +20,9 @@ export function uniqueFilenames(names: string[]): string[] {
 }
 
 export function createZipBlob(entries: ZipEntry[]): Blob {
+  if (entries.length === 0) {
+    throw new Error("Cannot create a zip with no entries");
+  }
   const names = uniqueFilenames(entries.map((entry) => entry.name));
   const files: Record<string, Uint8Array> = {};
   entries.forEach((entry, i) => {

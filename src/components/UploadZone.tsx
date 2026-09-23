@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
-import { ACCEPTED_MIME_TYPES } from "../types";
+import { ACCEPT_ATTRIBUTE, ACCEPTED_MIME_TYPES } from "../types";
 import { FileTypeHint } from "./FileTypeHint";
 
 interface UploadZoneProps {
@@ -7,8 +7,6 @@ interface UploadZoneProps {
   onFiles: (files: File[]) => void;
   onDragStateChange: (active: boolean) => void;
 }
-
-const ACCEPT = "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp";
 
 function isDataTransferAcceptable(dataTransfer: DataTransfer): boolean {
   const items = Array.from(dataTransfer.items).filter((item) => item.kind === "file");
@@ -86,7 +84,7 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPT}
+        accept={ACCEPT_ATTRIBUTE}
         multiple
         className="upload-zone__input"
         aria-hidden="true"
@@ -103,7 +101,12 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
         type="button"
         className="upload-zone__button"
         onClick={openPicker}
-        aria-label="Upload one or more images to convert. Accepts PNG, JPG, JPEG, or WebP."
+        aria-label={
+          isDragInvalid
+            ? "That file type isn't supported. Accepts PNG, JPG, JPEG, or WebP."
+            : "Upload one or more images to convert. Accepts PNG, JPG, JPEG, or WebP."
+        }
+        aria-invalid={isDragInvalid || undefined}
       >
         <span className="upload-zone__icon" aria-hidden="true">
           {isDragInvalid ? <InvalidIcon /> : <UploadIcon />}
@@ -122,6 +125,13 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
 
         <FileTypeHint className="upload-zone__hint" />
       </button>
+
+      {/* The visual label swap above (icon/text) isn't itself announced —
+          a drag never moves focus, so a screen reader user gets no signal
+          unless this transient state is pushed through a live region. */}
+      <span className="visually-hidden" role="status" aria-live="assertive">
+        {isDragInvalid ? "That file type isn't supported. Accepts PNG, JPG, JPEG, or WebP." : ""}
+      </span>
     </div>
   );
 });

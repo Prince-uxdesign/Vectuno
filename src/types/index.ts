@@ -11,6 +11,11 @@ export type AcceptedMimeType = (typeof ACCEPTED_MIME_TYPES)[number];
 // present but unsupported — see validateFile.
 export const ACCEPTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"] as const;
 
+// Shared `accept` attribute value for every file input in the app — kept in
+// one place so UploadZone and BatchWorkspace can't drift on which types they
+// accept.
+export const ACCEPT_ATTRIBUTE = [...ACCEPTED_MIME_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
+
 export type ColorMode = "color" | "bw";
 export type Level = "low" | "medium" | "high";
 
@@ -35,16 +40,23 @@ export interface ConversionOptions {
 // the dominant background and misses distinct smaller regions entirely — they
 // get absorbed into the nearest sampled color instead of getting their own
 // palette slot, which reads as "colors merging into each other." 20 forces a
-// 5x4 grid: finer sampling, verified (scripts/_tmp-numcolors-sweep*.mjs, see
-// docs/vectorization-evaluation.md Phase 2) to fix that merging on affected
+// 5x4 grid: finer sampling, verified (see docs/vectorization-evaluation.md
+// Phase 2) to fix that merging on affected
 // fixtures (pixel-error dropped ~65-99% on the two affected test images)
 // while being neutral-to-positive on logos/flat art that weren't affected.
-export const DEFAULT_OPTIONS: ConversionOptions = {
-  colorMode: "color",
-  numberOfColors: 20,
-  detail: "medium",
-  smoothness: "medium",
-};
+// A factory, not a shared constant object: useConverter and useBatchConverter
+// each use this as their initial `options` value, and a plain shared object
+// would mean both hooks' state starts out pointing at the exact same
+// reference — safe today since reducers always replace `options` wholesale,
+// but a footgun for any future code that mutates options in place.
+export function createDefaultOptions(): ConversionOptions {
+  return {
+    colorMode: "color",
+    numberOfColors: 20,
+    detail: "medium",
+    smoothness: "medium",
+  };
+}
 
 export interface DecodedImage {
   imageData: ImageData;

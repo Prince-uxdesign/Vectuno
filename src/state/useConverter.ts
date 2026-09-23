@@ -5,7 +5,7 @@ import { vectorize } from "../lib/engine/vectorizeClient";
 import {
   AppError,
   ConversionCancelled,
-  DEFAULT_OPTIONS,
+  createDefaultOptions,
   type ConversionOptions,
   type ConversionResult,
   type DecodedImage,
@@ -43,7 +43,7 @@ const initialState: ConverterState = {
   file: null,
   previewUrl: null,
   decoded: null,
-  options: DEFAULT_OPTIONS,
+  options: createDefaultOptions(),
   result: null,
   errorMessage: null,
   errorHint: null,
@@ -63,16 +63,22 @@ function reducer(state: ConverterState, action: Action): ConverterState {
     case "READY":
       return { ...state, stage: "ready", decoded: action.decoded };
     case "CONVERT_START":
-      return { ...state, stage: "converting", errorMessage: null, errorHint: null, errorRecovery: null };
+      return { ...state, stage: "converting", errorMessage: null, errorHint: null, errorRecovery: null, result: null };
     case "CONVERT_SUCCESS":
       return { ...state, stage: "success", result: action.result };
     case "CONVERT_CANCELLED":
       // Cancelling isn't a failure — go straight back to "ready", same as
       // before the user hit Convert. No error state, nothing to recover from.
-      return { ...state, stage: "ready" };
+      // Clear any stale result so ready + result is never an impossible combo.
+      return { ...state, stage: "ready", result: null };
     case "ERROR":
       return { ...state, stage: "error", errorMessage: action.message, errorHint: action.hint, errorRecovery: action.recovery };
     case "SET_OPTIONS":
+      // Changing settings invalidates a prior success — the displayed SVG
+      // would otherwise silently disagree with visible settings.
+      if (state.stage === "success") {
+        return { ...state, options: { ...state.options, ...action.options }, stage: "ready", result: null };
+      }
       return { ...state, options: { ...state.options, ...action.options } };
     case "RESET":
       return { ...initialState, options: state.options };

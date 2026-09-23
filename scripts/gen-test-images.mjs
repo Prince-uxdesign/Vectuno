@@ -10,11 +10,14 @@ mkdirSync(OUT, { recursive: true });
 const svgWrap = (w, h, body) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 
+async function fromSvgBuffer(svg, w, h) {
+  return sharp(Buffer.from(svg), { density: 96 }).resize(w, h).png().toBuffer();
+}
+
 async function fromSvg(name, svg, w, h) {
-  await sharp(Buffer.from(svg), { density: 96 })
-    .resize(w, h)
-    .png()
-    .toFile(`${OUT}/${name}.png`);
+  const buf = await fromSvgBuffer(svg, w, h);
+  const { writeFileSync } = await import("fs");
+  writeFileSync(`${OUT}/${name}.png`, buf);
   console.log("wrote", name);
 }
 
@@ -191,5 +194,36 @@ await fromSvg(
   }
   await fromSvg("12-fine-details", svgWrap(500, 300, `<rect width="500" height="300" fill="#fff"/>${lines}`), 500, 300);
 }
+
+// 13. WebP source (exercises the WebP decode path, not just PNG/JPEG)
+await sharp(Buffer.from(svgWrap(400, 400, `
+    <rect width="400" height="400" fill="#f4f1de"/>
+    <circle cx="200" cy="200" r="140" fill="#e07a5f"/>
+    <rect x="120" y="120" width="160" height="160" fill="#3d405b"/>
+  `)))
+  .webp({ quality: 90 })
+  .toFile(`${OUT}/13-webp.webp`);
+console.log("wrote 13-webp");
+
+// 14. Corrupted file — valid PNG header/magic bytes, truncated body. Exercises
+// the CORRUPTED_FILE path (createImageBitmap fails to decode) rather than the
+// UNSUPPORTED_FILE path (wrong extension/MIME), which is a distinct code path.
+{
+  const validPng = await fromSvgBuffer(
+    svgWrap(64, 64, `<rect width="64" height="64" fill="#000"/>`),
+    64, 64
+  );
+  const { writeFileSync } = await import("fs");
+  writeFileSync(`${OUT}/14-corrupted.png`, validPng.subarray(0, Math.floor(validPng.length / 3)));
+  console.log("wrote 14-corrupted");
+}
+
+// 15. Oversized dimensions — exceeds MAX_DECODED_DIMENSION (8000px per side,
+// see src/lib/image/validate.ts) to exercise the DIMENSIONS_TOO_LARGE path.
+await fromSvg(
+  "15-oversized-dims",
+  svgWrap(9000, 1200, `<rect width="9000" height="1200" fill="#e0e0e0"/><circle cx="4500" cy="600" r="500" fill="#264653"/>`),
+  9000, 1200
+);
 
 console.log("done");

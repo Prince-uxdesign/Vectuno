@@ -17,14 +17,12 @@
      backgrounds: ~4.9:1 on cream, ~5.4:1 on canvas (verified). */
   --muted-warm: #6b6964;
   --coral: #f2805d;
-  --coral-hover: #e97452;
   --coral-pressed: #d96544;
   /* Strawberry's literal error red (#EF4343) only reaches ~3.7:1 on this
      canvas at the sizes error-state__message actually renders at (15px,
      weight 600 — under the "large text" AA exemption). Darkened to a warm
      brick-red at ~5.1:1 (verified), same reasoning as --muted-warm above. */
   --error: #c6372e;
-  --success: #22c55e;
 
   --bg: var(--canvas);
   --fg: var(--ink);
@@ -37,7 +35,6 @@
   --on-primary: var(--canvas);
 
   --shadow-elevated: 0 6px 24px rgba(37, 37, 34, 0.06), 0 0 0 1px var(--border-firm);
-  --shadow-soft: 0 1px 3px rgba(37, 37, 34, 0.1);
 
   /* ---- Spacing scale (4px base) ---- */
   --space-1: 4px;
@@ -308,6 +305,8 @@ h3 {
   margin-top: var(--space-7);
 }
 
+/* Hide scrollbar chrome without hiding the scroll affordance — the partial
+   edge cards already signal there's more to see. */
 .showcase__track {
   list-style: none;
   margin: 0;
@@ -321,11 +320,6 @@ h3 {
   scroll-snap-type: x proximity;
   scroll-padding-inline: var(--space-4);
   -webkit-overflow-scrolling: touch;
-}
-
-/* Hide scrollbar chrome without hiding the scroll affordance — the partial
-   edge cards already signal there's more to see. */
-.showcase__track {
   scrollbar-width: none;
 }
 
@@ -917,7 +911,6 @@ h3 {
   transform: rotate(45deg);
 }
 
-.advanced-disclosure__body,
 .advanced-disclosure .conversion-settings__group--advanced {
   padding-top: var(--space-4);
 }
@@ -971,11 +964,6 @@ h3 {
 .conversion-status__subtext {
   color: var(--muted);
   font-size: var(--text-xs);
-}
-
-.conversion-status__actions {
-  display: flex;
-  gap: var(--space-3);
 }
 
 .conversion-status__cta {
@@ -1242,6 +1230,13 @@ h3 {
   gap: var(--space-6);
 }
 
+/* Grid/flex child with no intrinsic-width guard: without this, the
+   CompareSlider's natural image width can force the 1fr grid track (and the
+   whole row) wider than the viewport instead of shrinking to fit. */
+.result-screen__comparison {
+  min-width: 0;
+}
+
 .result-screen__sidebar {
   display: flex;
   flex-direction: column;
@@ -1456,12 +1451,25 @@ h3 {
   color: var(--muted);
 }
 
+.batch-list__status-text--converting {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 .batch-list__status-text--done {
   color: var(--fg);
 }
 
 .batch-list__status-text--error {
   color: var(--error);
+}
+
+.batch-list__item--converting {
+  background: var(--surface);
+}
+
+.batch-list__item--error {
+  background: color-mix(in srgb, var(--error) 6%, transparent);
 }
 
 .batch-list__download,
@@ -1641,6 +1649,11 @@ h3 {
   padding: clamp(var(--space-5), 4vw, var(--space-6));
 }
 
+.error-state__icon {
+  display: inline-flex;
+  color: var(--error);
+}
+
 .error-state__message {
   margin: 0;
   color: var(--error);
@@ -1815,6 +1828,21 @@ summary:focus-visible,
   text-align: center;
 }
 
+.site-footer__nav {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.site-footer__nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: var(--text-sm);
+}
+
+.site-footer__nav-link:hover {
+  color: var(--fg);
+}
+
 .site-footer__note,
 .site-footer__copyright {
   margin: 0;
@@ -1822,7 +1850,14 @@ summary:focus-visible,
   font-size: var(--text-xs);
 }
 
+/* The header nav (.site-nav) only appears at 640px+, so this footer nav is
+   mobile's only way to reach those sections — hide the redundant copy once
+   the header nav takes over. */
 @media (min-width: 640px) {
+  .site-footer__nav {
+    display: none;
+  }
+
   .site-footer__inner {
     flex-direction: row;
     justify-content: space-between;
@@ -1870,4 +1905,34 @@ summary:focus-visible,
   .hero__intro {
     margin-bottom: var(--space-4);
   }
+}
+
+/* ---------- RootErrorBoundary ---------- */
+
+.root-error-boundary {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+.root-error-boundary__message {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.root-error-boundary__reload {
+  border: 1px solid var(--border-firm);
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--on-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-5);
+  cursor: pointer;
 }
