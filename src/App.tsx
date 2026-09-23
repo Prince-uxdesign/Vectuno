@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigation } from "./components/Navigation";
 import { UploadZone } from "./components/UploadZone";
 import { HowItWorks } from "./components/HowItWorks";
+import { ImageShowcase } from "./components/ImageShowcase";
+import { Footer } from "./components/Footer";
 import { FilePreview } from "./components/FilePreview";
 import { FileMetadata } from "./components/FileMetadata";
 import { ConversionSettings } from "./components/ConversionSettings";
 import { ConversionStatus } from "./components/ConversionStatus";
+import { ConversionLoader } from "./components/ConversionLoader";
 import { ResultPreview } from "./components/ResultPreview";
 import { ErrorState } from "./components/ErrorState";
 import { BatchWorkspace } from "./components/BatchWorkspace";
@@ -20,6 +23,7 @@ function App() {
   const [rejectedCount, setRejectedCount] = useState(0);
   const uploadZoneRef = useRef<HTMLButtonElement>(null);
   const workspaceHeadingRef = useRef<HTMLHeadingElement>(null);
+  const convertingHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const isBatchActive = batch.state.items.length > 0;
   const isLanding = !isBatchActive && (state.stage === "empty" || state.stage === "dragActive");
@@ -28,13 +32,14 @@ function App() {
   // can retry without re-selecting anything. An upload/decode failure means
   // the file itself was rejected, so no file context exists to show.
   const isRetryableError = state.stage === "error" && state.errorRecovery === "retry";
+  // "converting" gets its own dedicated screen (see ConversionLoader) rather
+  // than living inside the settings workspace — the progress pill and fact
+  // rotation are the visual centerpiece while a conversion is running, not
+  // one panel among several.
   const showWorkspace =
     !isBatchActive &&
-    (state.stage === "fileSelected" ||
-      state.stage === "preparing" ||
-      state.stage === "ready" ||
-      state.stage === "converting" ||
-      isRetryableError);
+    (state.stage === "fileSelected" || state.stage === "preparing" || state.stage === "ready" || isRetryableError);
+  const showConverting = !isBatchActive && state.stage === "converting";
   const showResult = !isBatchActive && state.stage === "success";
   const showError = !isBatchActive && state.stage === "error";
 
@@ -80,6 +85,25 @@ function App() {
     }
   }, [isLanding, showWorkspace]);
 
+  // Same reasoning as above for the ready <-> converting transition: each
+  // swaps out the control that had focus (Convert button <-> Cancel
+  // button live in different screens), so park focus on the new screen's
+  // heading. Success/error focus themselves already (see ResultPreview /
+  // ErrorState); cancelling a conversion returns to showWorkspace, covered
+  // by the effect above only when landing was the prior screen, so it's
+  // handled separately here.
+  const prevStageRef = useRef(state.stage);
+  useEffect(() => {
+    const prevStage = prevStageRef.current;
+    prevStageRef.current = state.stage;
+    if (prevStage === state.stage) return;
+    if (state.stage === "converting") {
+      requestAnimationFrame(() => convertingHeadingRef.current?.focus());
+    } else if (prevStage === "converting" && state.stage === "ready") {
+      requestAnimationFrame(() => workspaceHeadingRef.current?.focus());
+    }
+  }, [state.stage]);
+
   const scrollToUpload = useCallback(() => {
     if (!isLanding) {
       reset();
@@ -102,7 +126,7 @@ function App() {
           <Section className="hero" compact>
             <Container>
               <div className="hero__intro">
-                <h1 className="hero__heading">Turn raster images into clean vectors</h1>
+                <h1 className="hero__heading">Turn images into scalable vectors</h1>
                 <p className="hero__subheading">
                   Upload a PNG, JPG, or WebP and get a crisp, editable SVG back — converted entirely in your
                   browser. Nothing is uploaded to a server.
@@ -110,14 +134,7 @@ function App() {
               </div>
             </Container>
 
-            <Container wide>
-              <UploadZone
-                ref={uploadZoneRef}
-                isDragActive={state.stage === "dragActive"}
-                onFiles={handleUploadFiles}
-                onDragStateChange={setDragActive}
-              />
-            </Container>
+            <ImageShowcase />
           </Section>
         )}
 
@@ -153,13 +170,7 @@ function App() {
               </h2>
               <div className="workspace workspace--split">
                 <div className="workspace__media">
-                  {state.previewUrl && (
-                    <FilePreview
-                      previewUrl={state.previewUrl}
-                      onChangeImage={reset}
-                      disabled={state.stage === "converting"}
-                    />
-                  )}
+                  {state.previewUrl && <FilePreview previewUrl={state.previewUrl} onChangeImage={reset} />}
 
                   {state.file && (
                     <FileMetadata
@@ -190,16 +201,23 @@ function App() {
                       onChooseNew={reset}
                     />
                   ) : (
-                    <ConversionStatus stage={state.stage} onConvert={convert} onCancel={cancel} />
+                    <ConversionStatus stage={state.stage} onConvert={convert} />
                   )}
 
-                  <ConversionSettings
-                    options={state.options}
-                    onChange={setOptions}
-                    disabled={state.stage === "converting"}
-                  />
+                  <ConversionSettings options={state.options} onChange={setOptions} disabled={false} />
                 </div>
               </div>
+            </Container>
+          </Section>
+        )}
+
+        {showConverting && (
+          <Section compact>
+            <Container>
+              <h2 ref={convertingHeadingRef} className="visually-hidden" tabIndex={-1}>
+                Converting your image
+              </h2>
+              <ConversionLoader previewUrl={state.previewUrl} onCancel={cancel} />
             </Container>
           </Section>
         )}
@@ -246,10 +264,23 @@ function App() {
 
         {isLanding && (
           <>
-            <Section id="how-it-works">
+            <Section id="how-it-works" compact>
               <Container>
-                <h2 className="section-heading">How it works</h2>
                 <HowItWorks />
+              </Container>
+            </Section>
+
+            <Section id="converter" compact>
+              <Container>
+                <h2 className="section-heading">Convert an image</h2>
+              </Container>
+              <Container wide>
+                <UploadZone
+                  ref={uploadZoneRef}
+                  isDragActive={state.stage === "dragActive"}
+                  onFiles={handleUploadFiles}
+                  onDragStateChange={setDragActive}
+                />
               </Container>
             </Section>
 
@@ -266,6 +297,8 @@ function App() {
           </>
         )}
       </main>
+
+      <Footer />
     </div>
   );
 }

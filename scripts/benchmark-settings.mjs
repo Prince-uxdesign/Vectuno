@@ -19,7 +19,7 @@ function countPaths(svg) {
 }
 
 const BASE = {
-  numberofcolors: 16,
+  numberofcolors: 20, // mirrors DEFAULT_OPTIONS in src/types/index.ts
   colorquantcycles: 3,
   blurradius: 0,
   blurdelta: 20,
