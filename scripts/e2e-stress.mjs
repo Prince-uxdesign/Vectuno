@@ -63,7 +63,7 @@ async function testDoubleClickConvert() {
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
 
-  const btn = page.locator(".conversion-status .btn-primary");
+  const btn = page.locator(".conversion-settings__cta");
   // Fire two clicks back to back without waiting; the UI may transition to
   // Cancel/converting/success fast enough that the second click's target
   // detaches mid-action - that's fine, it just means the race window closed
@@ -112,7 +112,7 @@ async function testRetryRecoversToSuccess() {
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.locator(".error-state").waitFor({ timeout: 10000 });
   ok("first attempt fails as forced", await page.locator(".error-state").isVisible());
 
@@ -137,7 +137,7 @@ async function testRepeatedDownloads() {
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.waitForSelector(".result-screen", { timeout: 30000 });
 
   const downloadBtn = page.locator(".result-screen__actions .btn-primary");
@@ -165,7 +165,7 @@ async function testUnicodeFilename() {
     buffer,
   });
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.waitForSelector(".result-screen", { timeout: 30000 });
   const downloadPromise = page.waitForEvent("download", { timeout: 5000 });
   await page.locator(".result-screen__actions .btn-primary").click();

@@ -138,25 +138,40 @@ export function countDominantBins(data: Uint8ClampedArray): number {
 }
 
 // Deterministic pre-quantization: snap every opaque pixel to the nearest of
-// the K most frequent coarse-bin centers, where K tracks the dominant-bin
+// the K most frequent coarse-bin MEANS, where K tracks the dominant-bin
 // count (need + margin, clamped 8–16). JPEG ringing around flat fills then
 // collapses back into the real fills BEFORE the tracer's grid-seeded palette
 // sampling ever sees it — small-but-distinct colors (white eyes at 1.4%,
 // mouth red at 0.2%) survive because they're far in RGB space, while noise
 // near yellow/black gets absorbed. Transparent pixels pass through untouched.
 // Runs on the worker's pixel copy; the caller's buffer is never mutated.
+//
+// Fidelity note: the palette entries are the TRUE per-bin mean colors
+// (average of the actual source pixels that fell in each bin), NOT the
+// geometric bin centers. Bin centers quantize a warm milky background like
+// #F5EFE2 (245,239,226) to (248,232,232) — a -7 green / +6 blue shift that
+// reads as a green/teal tint next to the original. Means preserve the
+// original hue to within rounding error.
 export function quantizeToDominant(data: Uint8ClampedArray, k: number): Uint8ClampedArray {
-  const counts = new Map<number, number>();
+  const sums = new Map<number, [number, number, number, number]>();
   const stride = 16;
   for (let i = 0; i < data.length; i += 4 * stride) {
     if (data[i + 3] < 128) continue;
     const key = ((data[i] >> 4) << 12) | ((data[i + 1] >> 4) << 8) | ((data[i + 2] >> 4) << 4);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const e = sums.get(key);
+    if (e) {
+      e[0] += data[i];
+      e[1] += data[i + 1];
+      e[2] += data[i + 2];
+      e[3] += 1;
+    } else {
+      sums.set(key, [data[i], data[i + 1], data[i + 2], 1]);
+    }
   }
-  const palette = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
+  const palette = [...sums.entries()]
+    .sort((a, b) => b[1][3] - a[1][3])
     .slice(0, Math.max(1, k))
-    .map(([key]) => [((key >> 12) & 15) * 16 + 8, ((key >> 8) & 15) * 16 + 8, ((key >> 4) & 15) * 16 + 8]);
+    .map(([, s]) => [Math.round(s[0] / s[3]), Math.round(s[1] / s[3]), Math.round(s[2] / s[3])]);
   const out = new Uint8ClampedArray(data.length);
   for (let i = 0; i < data.length; i += 4) {
     const a = data[i + 3];
@@ -202,6 +217,35 @@ export function quantizationWidth(data: Uint8ClampedArray): number {
   const root = Math.sqrt(k);
   if (Number.isInteger(root)) k = k === 16 ? 15 : Math.min(16, k + 1);
   return k;
+}
+
+// True mean color of the single most frequent coarse bin (opaque pixels
+// only). Used to snap the traced background fill back to the source's exact
+// hue — imagetracerjs's palette averaging can dull a flat background by
+// several units per channel, which on a near-white milky fill reads as a
+// green/teal tint side-by-side with the original. Null when fully transparent.
+export function dominantMeanColor(data: Uint8ClampedArray): [number, number, number] | null {
+  const sums = new Map<number, [number, number, number, number]>();
+  const stride = 4;
+  for (let i = 0; i < data.length; i += 4 * stride) {
+    if (data[i + 3] < 128) continue;
+    const key = ((data[i] >> 4) << 12) | ((data[i + 1] >> 4) << 8) | ((data[i + 2] >> 4) << 4);
+    const e = sums.get(key);
+    if (e) {
+      e[0] += data[i];
+      e[1] += data[i + 1];
+      e[2] += data[i + 2];
+      e[3] += 1;
+    } else {
+      sums.set(key, [data[i], data[i + 1], data[i + 2], 1]);
+    }
+  }
+  let best: [number, number, number, number] | null = null;
+  for (const s of sums.values()) {
+    if (!best || s[3] > best[3]) best = s;
+  }
+  if (!best) return null;
+  return [Math.round(best[0] / best[3]), Math.round(best[1] / best[3]), Math.round(best[2] / best[3])];
 }
 
 export function buildImageTracerOptions(

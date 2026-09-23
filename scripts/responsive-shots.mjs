@@ -34,7 +34,7 @@ for (const v of VIEWPORTS) {
   await page.locator(".advanced-disclosure summary").click();
   await page.screenshot({ path: path.join(OUT, `${v.label}-02-ready.png`), fullPage: true });
 
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.waitForSelector(".result-screen, .error-state", { timeout: 30000 });
   await page.screenshot({ path: path.join(OUT, `${v.label}-03-result.png`), fullPage: true });
 

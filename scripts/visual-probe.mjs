@@ -72,14 +72,16 @@ await testRealDrag(1440);
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "02-color-logo.png"));
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
-  await page.locator(".conversion-status .btn-primary").click();
-  await page.locator(".conversion-status__headline", { hasText: /Vectorizing/ }).waitFor({ timeout: 5000 });
+  await page.locator(".conversion-settings__cta").click();
+  await page.locator(".conversion-loader__headline", { hasText: /Vectorizing/ }).waitFor({ timeout: 5000 });
 
-  const changeImageDisabled = await page.locator(".file-preview .btn-secondary").isDisabled();
-  console.log(`Change-image button disabled while converting: ${changeImageDisabled}`);
+  // During converting the workspace unmounts (dedicated ConversionLoader
+  // screen), so Change image / settings aren't mounted at all — inert by design.
+  const changeImageCount = await page.locator(".file-preview .btn-secondary").count();
+  console.log(`Change-image button mounted while converting (expected 0): ${changeImageCount}`);
 
-  const settingsDisabled = await page.locator(".conversion-settings").isDisabled();
-  console.log(`Settings fieldset disabled while converting: ${settingsDisabled}`);
+  const settingsCount = await page.locator(".conversion-settings").count();
+  console.log(`Settings fieldset mounted while converting (expected 0): ${settingsCount}`);
 
   await page.screenshot({ path: path.join(OUT, "converting-state.png") });
   await page.close();
@@ -95,7 +97,7 @@ for (const width of [320, 768, 1440]) {
   await page.locator(".conversion-status__subtext", { hasText: /Ready to convert/ }).waitFor({ timeout: 10000 });
   await page.screenshot({ path: path.join(OUT, `ready-${width}.png`), fullPage: true });
 
-  await page.locator(".conversion-status .btn-primary").click();
+  await page.locator(".conversion-settings__cta").click();
   await page.waitForSelector(".result-screen", { timeout: 30000 });
   await page.screenshot({ path: path.join(OUT, `result-${width}.png`), fullPage: true });
   await page.close();

@@ -1,5 +1,5 @@
 import { AppError, ConversionCancelled, type ConversionOptions, type ConversionResult, type DecodedImage } from "../../types";
-import { buildImageTracerOptions, countDominantBins, DEFAULT_COLORS, quantizationWidth } from "./presets";
+import { buildImageTracerOptions, countDominantBins, DEFAULT_COLORS, dominantMeanColor, quantizationWidth } from "./presets";
 import { optimizeSvg } from "./optimizeSvg";
 import type { VectorizeFailure, VectorizeRequest, VectorizeSuccess } from "./vectorize.worker";
 
@@ -53,7 +53,12 @@ export function vectorize(
       const msg = event.data;
       if (msg.ok) {
         try {
-          const svg = optimizeSvg(msg.svg);
+          // Snap the traced background to the source's measured dominant
+          // color so flat fills (milky near-whites especially) render
+          // exactly, not a few units drifted toward green/teal.
+          const dominant =
+            options.colorMode === "bw" ? null : dominantMeanColor(decoded.imageData.data);
+          const svg = optimizeSvg(msg.svg, dominant);
           resolve({
             svg,
             sizeBytes: new Blob([svg]).size,

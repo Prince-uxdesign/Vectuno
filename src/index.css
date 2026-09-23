@@ -478,6 +478,9 @@ h3 {
 .upload-zone__sub {
   color: var(--muted);
   font-size: var(--text-base);
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
 }
 
 .upload-zone__browse {
@@ -691,6 +694,10 @@ h3 {
 }
 
 /* ---------- About ---------- */
+
+#about .section-heading {
+  margin-bottom: var(--space-2);
+}
 
 .about-text {
   color: var(--muted);
@@ -966,9 +973,8 @@ h3 {
   font-size: var(--text-xs);
 }
 
-.conversion-status__cta {
+.conversion-settings__cta {
   width: 100%;
-  max-width: 320px;
 }
 
 .spinner {

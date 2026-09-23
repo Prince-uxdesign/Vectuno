@@ -118,7 +118,8 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
           <>
             <span className="upload-zone__label">{isDragActive ? "Release to upload" : "Drop your images here"}</span>
             <span className="upload-zone__sub">
-              or <span className="upload-zone__browse">browse files</span>
+              <span>or</span>
+              <span className="upload-zone__browse">browse files</span>
             </span>
           </>
         )}
