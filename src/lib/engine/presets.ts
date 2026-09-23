@@ -1,4 +1,6 @@
-import type { ConversionOptions } from "../../types";
+import type { PresetId } from "../../types";
+import { buildPalette, type PaletteColor, type PaletteSpec } from "./analysis";
+import type { CleanupConfig } from "./optimizeSvg";
 
 // imagetracerjs option shape (subset used here). Untyped upstream, so we
 // declare the fields we rely on rather than pulling in a loose `any` type.
@@ -14,256 +16,179 @@ export interface ImageTracerOptions {
   roundcoords: number;
   rightangleenhance: boolean;
   strokewidth: number;
+  pal?: { r: number; g: number; b: number; a: number }[];
 }
 
-// Verified against representative fixtures via `npm run test:settings`
-// (scripts/benchmark-settings.mjs) before shipping — not guessed. `pathomit`
-// is imagetracerjs's minimum
-// path-size filter: it's the only parameter that changes *which* shapes
-// survive, so it's the honest mapping for "Detail". Values were raised after
-// a fidelity pass on flat cartoon art (black cat on yellow): pathomit 8
-// kept hundreds of JPEG-noise / antialiased-edge micro-paths (1253 paths on
-// a 1200px flat illustration that should be <20). The new scale still
-// separates Low/Medium/High monotonically, but Medium now actually cleans.
-const DETAIL_PATHOMIT: Record<ConversionOptions["detail"], number> = {
-  low: 40,
-  medium: 16,
-  high: 4,
+// What a preset actually changes in the engine. Nothing here is shown to the
+// user — the UI only sees `label` and `description`.
+export interface PresetConfig {
+  id: PresetId;
+  label: string;
+  // One line, designer language.
+  description: string;
+  tracer: {
+    // Smallest region (in pixels of outline) the tracer keeps.
+    pathomit: number;
+    // Curve-fitting tolerance: higher = fewer, smoother segments.
+    ltres: number;
+    qtres: number;
+    // Palette refinement passes.
+    colorquantcycles: number;
+    // Decimal places kept in coordinates.
+    roundcoords: number;
+  };
+  // How the image's real fills are found (see analysis.buildPalette).
+  palette: PaletteSpec;
+  // If the palette accounts for at least this share of the image it is "flat
+  // art": pixels are snapped to the palette before tracing (clean edges, exact
+  // colors). Gradients and photographs fall below it and are traced from the
+  // original pixels with `palette.maxColors` colors instead.
+  flatCoverage: number;
+  // Trace a thresholded ink/background bitmap instead of a color palette.
+  monochrome: boolean;
+  cleanup: CleanupConfig;
+}
+
+export const NO_CLEANUP: CleanupConfig = {
+  speckle: null,
+  stackShapes: false,
+  compactColors: false,
+  monochrome: false,
 };
 
-// `ltres`/`qtres` are imagetracerjs's line/quadratic curve-fitting error
-// tolerance — literally "curve simplification tolerance" from the product
-// brief, which is exactly why this is the "Smoothness" control rather than
-// Detail. Verified independent of pathomit: path *count* stays identical
-// across low/medium/high on every fixture tested (same shapes kept), while
-// output size shrinks monotonically (e.g. 35.5KB -> 20.0KB -> 18.7KB on a
-// logo) as curves get simplified into fewer, looser control points.
-const SMOOTHNESS_TRES: Record<ConversionOptions["smoothness"], number> = {
-  low: 0.2,
-  medium: 1,
-  high: 4,
+export const PRESETS: Record<PresetId, PresetConfig> = {
+  clean: {
+    id: "clean",
+    label: "Clean",
+    description: "Best for logos and simple graphics.",
+    tracer: { pathomit: 20, ltres: 1.5, qtres: 1.5, colorquantcycles: 5, roundcoords: 1 },
+    palette: { maxColors: 8, minShare: 0.005, mergeDistance: 40, snapTolerance: 28, smoothing: 1 },
+    flatCoverage: 0.88,
+    monochrome: false,
+    cleanup: {
+      speckle: { fraction: 0.008, min: 6, max: 12 },
+      stackShapes: true,
+      compactColors: true,
+      monochrome: false,
+    },
+  },
+  balanced: {
+    id: "balanced",
+    label: "Balanced",
+    description: "Great for most images.",
+    tracer: { pathomit: 8, ltres: 0.6, qtres: 0.6, colorquantcycles: 5, roundcoords: 1 },
+    palette: { maxColors: 20, minShare: 0.003, mergeDistance: 28, snapTolerance: 36, smoothing: 0 },
+    flatCoverage: 0.9,
+    monochrome: false,
+    cleanup: {
+      speckle: { fraction: 0.005, min: 4, max: 8 },
+      stackShapes: true,
+      compactColors: true,
+      monochrome: false,
+    },
+  },
+  detailed: {
+    id: "detailed",
+    label: "Detailed",
+    description: "Preserve more visual detail.",
+    tracer: { pathomit: 10, ltres: 0.3, qtres: 0.3, colorquantcycles: 5, roundcoords: 1 },
+    palette: { maxColors: 32, minShare: 0.002, mergeDistance: 24, snapTolerance: 36, smoothing: 0 },
+    flatCoverage: 0.92,
+    monochrome: false,
+    cleanup: {
+      speckle: { fraction: 0.005, min: 4, max: 7 },
+      stackShapes: true,
+      compactColors: true,
+      monochrome: false,
+    },
+  },
+  monochrome: {
+    id: "monochrome",
+    label: "Monochrome",
+    description: "Create a single-color vector.",
+    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, colorquantcycles: 1, roundcoords: 1 },
+    palette: { maxColors: 2, minShare: 0, mergeDistance: 0, snapTolerance: 0, smoothing: 0 },
+    flatCoverage: 1,
+    monochrome: true,
+    cleanup: {
+      speckle: null,
+      stackShapes: false,
+      compactColors: true,
+      monochrome: true,
+    },
+  },
 };
 
-// blurradius (pre-blurring the source before tracing) was tested as a
-// candidate "smoothness" control and rejected: it increases path count and
-// file size on flat/illustration art (edge anti-aliasing gets quantized
-// into extra color bands), the opposite of what "smoothness" should do. Left
-// off entirely rather than exposed as a control that sometimes makes things
-// worse. roundcoords (coordinate decimal precision) has no visible effect on
-// shape and is fixed rather than exposed, per "don't add a setting that
-// can't meaningfully influence output."
-// colorsampling (palette seeding strategy) and mincolorratio (palette-slot
-// reseeding threshold) are deliberately left at imagetracerjs's own defaults
-// (2 and 0) rather than exposed or changed, after testing the alternatives:
-//   - colorsampling: 1 (samplepalette — random pixel picks) and 0
-//     (generatepalette — RGB-cube + random padding) both call Math.random()
-//     internally with no seed, so the *same image converted twice* can
-//     produce a visibly different SVG. Confirmed via 5 repeated runs each:
-//     worst-of-5 pixel error on some fixtures was 3-15x the median. Not acceptable for a tool people expect
-//     to be repeatable. colorsampling: 2 (samplepalette2, the default) is a
-//     fixed spatial grid — no randomness anywhere in this pipeline.
-//   - mincolorratio > 0 (reseed palette slots below a pixel-count threshold)
-//     also reseeds via Math.random(), and empirically discarded real minor
-//     brand colors on flat art in testing (see DEFAULT_OPTIONS.numberOfColors
-//     comment in types/index.ts for the fix that actually addressed the
-//     color-merging bug this was tried against).
-const FIXED = {
-  blurradius: 0,
-  blurdelta: 20,
-  roundcoords: 1,
-  rightangleenhance: true,
-  strokewidth: 0,
-  // Raised 3 -> 5: more k-means-style refinement passes over the palette, so
-  // dominant flat colors land closer to their true values (less dulling)
-  // without adding randomness (colorsampling stays deterministic).
-  colorquantcycles: 5,
-} as const;
+export const PRESET_ORDER: readonly PresetId[] = ["clean", "balanced", "detailed", "monochrome"];
 
-// numberOfColors is documented as 2-64 (see ConversionOptions in
-// types/index.ts) but nothing upstream enforces that range before it
-// reaches imagetracerjs — clamp here so an out-of-range value (e.g. a
-// future UI bug or a hand-crafted options object) can't reach the worker.
+export function getPreset(id: PresetId): PresetConfig {
+  return PRESETS[id];
+}
+
 const MIN_COLORS = 2;
 const MAX_COLORS = 64;
 
-// Default slider value — when the user hasn't touched Advanced, we adapt
-// down for flat art (see estimatePaletteSize). A fixed 20 keeps JPEG noise
-// and antialiased edge bands as separate palette entries on images that
-// really only have 4-6 colors, which reads as speckles + dull washed-out
-// fills. Fewer palette slots forces those bands to merge into the dominant
-// colors, which is exactly what flat illustration needs.
-export const DEFAULT_COLORS = 20;
-
-function clampColors(n: number): number {
+export function clampColors(n: number): number {
   return Math.min(MAX_COLORS, Math.max(MIN_COLORS, Math.round(n)));
 }
 
-// Estimate how many palette slots flat art actually needs, from the decoded
-// pixels. Counts coarse 4-bit-per-channel bins by frequency and asks how many
-// bins cover 97% of sampled pixels: flat cartoons need 2-4 (a yellow, a black,
-// a white…), multicolor illustration ~13, photos hundreds. Coarse bins ignore
-// JPEG ringing while still separating real fills (yellow vs black vs white
-// vs red are far apart). Sampled stride keeps it cheap on 2000px images.
-export function estimatePaletteSize(data: Uint8ClampedArray): number {
-  const need = countDominantBins(data);
-  if (need <= 6) return 8;
-  if (need <= 10) return 12;
-  if (need <= 18) return 16;
-  return DEFAULT_COLORS;
+export interface TracePlan {
+  tracer: ImageTracerOptions;
+  // Flat art: the exact fills to snap pixels to before tracing.
+  palette: PaletteColor[] | null;
+  snapTolerance: number;
+  smoothing: number;
+  // Threshold to an ink/background bitmap before tracing.
+  mono: boolean;
 }
 
-// Shared dominant-bin count: how many coarse color bins cover 97% of sampled
-// opaque pixels. Single source of truth for both palette sizing and
-// pre-quantization width below.
-export function countDominantBins(data: Uint8ClampedArray): number {
-  const counts = new Map<number, number>();
-  let total = 0;
-  const stride = 16;
-  for (let i = 0; i < data.length; i += 4 * stride) {
-    if (data[i + 3] < 128) continue; // transparent — traced as opacity, not a color
-    const key = ((data[i] >> 4) << 12) | ((data[i + 1] >> 4) << 8) | ((data[i + 2] >> 4) << 4);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    total += 1;
-  }
-  if (total === 0) return Number.MAX_SAFE_INTEGER;
-  const sorted = [...counts.values()].sort((a, b) => b - a);
-  let covered = 0;
-  let need = 0;
-  for (const c of sorted) {
-    covered += c;
-    need += 1;
-    if (covered / total >= 0.97) break;
-  }
-  return need;
-}
+// Turns a preset + the actual image into concrete engine settings. Explicit
+// user color counts always win over the automatic palette.
+export function planTrace(config: PresetConfig, colorCount: number | null, data: Uint8ClampedArray): TracePlan {
+  const base = {
+    pathomit: config.tracer.pathomit,
+    ltres: config.tracer.ltres,
+    qtres: config.tracer.qtres,
+    colorquantcycles: config.tracer.colorquantcycles,
+    roundcoords: config.tracer.roundcoords,
+    blurradius: 0,
+    blurdelta: 20,
+    rightangleenhance: true,
+    strokewidth: 0,
+  } as const;
 
-// Deterministic pre-quantization: snap every opaque pixel to the nearest of
-// the K most frequent coarse-bin MEANS, where K tracks the dominant-bin
-// count (need + margin, clamped 8–16). JPEG ringing around flat fills then
-// collapses back into the real fills BEFORE the tracer's grid-seeded palette
-// sampling ever sees it — small-but-distinct colors (white eyes at 1.4%,
-// mouth red at 0.2%) survive because they're far in RGB space, while noise
-// near yellow/black gets absorbed. Transparent pixels pass through untouched.
-// Runs on the worker's pixel copy; the caller's buffer is never mutated.
-//
-// Fidelity note: the palette entries are the TRUE per-bin mean colors
-// (average of the actual source pixels that fell in each bin), NOT the
-// geometric bin centers. Bin centers quantize a warm milky background like
-// #F5EFE2 (245,239,226) to (248,232,232) — a -7 green / +6 blue shift that
-// reads as a green/teal tint next to the original. Means preserve the
-// original hue to within rounding error.
-export function quantizeToDominant(data: Uint8ClampedArray, k: number): Uint8ClampedArray {
-  const sums = new Map<number, [number, number, number, number]>();
-  const stride = 16;
-  for (let i = 0; i < data.length; i += 4 * stride) {
-    if (data[i + 3] < 128) continue;
-    const key = ((data[i] >> 4) << 12) | ((data[i + 1] >> 4) << 8) | ((data[i + 2] >> 4) << 4);
-    const e = sums.get(key);
-    if (e) {
-      e[0] += data[i];
-      e[1] += data[i + 1];
-      e[2] += data[i + 2];
-      e[3] += 1;
-    } else {
-      sums.set(key, [data[i], data[i + 1], data[i + 2], 1]);
-    }
+  if (config.monochrome) {
+    return {
+      tracer: {
+        ...base,
+        numberofcolors: 2,
+        pal: [
+          { r: 0, g: 0, b: 0, a: 255 },
+          { r: 255, g: 255, b: 255, a: 255 },
+        ],
+      },
+      palette: null,
+      snapTolerance: 0,
+      smoothing: 0,
+      mono: true,
+    };
   }
-  const palette = [...sums.entries()]
-    .sort((a, b) => b[1][3] - a[1][3])
-    .slice(0, Math.max(1, k))
-    .map(([, s]) => [Math.round(s[0] / s[3]), Math.round(s[1] / s[3]), Math.round(s[2] / s[3])]);
-  const out = new Uint8ClampedArray(data.length);
-  for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3];
-    if (a < 128) {
-      out[i] = 0;
-      out[i + 1] = 0;
-      out[i + 2] = 0;
-      out[i + 3] = 0;
-      continue;
-    }
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    let best = 0;
-    let bestDist = Number.MAX_SAFE_INTEGER;
-    for (let p = 0; p < palette.length; p++) {
-      const dr = r - palette[p][0];
-      const dg = g - palette[p][1];
-      const db = b - palette[p][2];
-      const d = dr * dr + dg * dg + db * db;
-      if (d < bestDist) {
-        bestDist = d;
-        best = p;
-      }
-    }
-    out[i] = palette[best][0];
-    out[i + 1] = palette[best][1];
-    out[i + 2] = palette[best][2];
-    out[i + 3] = 255;
-  }
-  return out;
-}
 
-// Width used for pre-quantization: dominant count + margin for small accents,
-// clamped so photos (need in the hundreds) don't build giant palettes.
-// Never a perfect square: imagetracerjs seeds its palette from a
-// sqrt(n)-by-sqrt(n) spatial grid, and exact squares (9 = 3x3, 16 = 4x4)
-// systematically miss small regions (same pathology documented for 16 in
-// types/index.ts) — white eyes vanish while noise survives.
-export function quantizationWidth(data: Uint8ClampedArray): number {
-  const need = countDominantBins(data);
-  let k = Math.min(16, Math.max(10, need + 5));
-  const root = Math.sqrt(k);
-  if (Number.isInteger(root)) k = k === 16 ? 15 : Math.min(16, k + 1);
-  return k;
-}
+  if (colorCount !== null) {
+    return { tracer: { ...base, numberofcolors: clampColors(colorCount) }, palette: null, snapTolerance: 0, smoothing: 0, mono: false };
+  }
 
-// True mean color of the single most frequent coarse bin (opaque pixels
-// only). Used to snap the traced background fill back to the source's exact
-// hue — imagetracerjs's palette averaging can dull a flat background by
-// several units per channel, which on a near-white milky fill reads as a
-// green/teal tint side-by-side with the original. Null when fully transparent.
-export function dominantMeanColor(data: Uint8ClampedArray): [number, number, number] | null {
-  const sums = new Map<number, [number, number, number, number]>();
-  const stride = 4;
-  for (let i = 0; i < data.length; i += 4 * stride) {
-    if (data[i + 3] < 128) continue;
-    const key = ((data[i] >> 4) << 12) | ((data[i + 1] >> 4) << 8) | ((data[i + 2] >> 4) << 4);
-    const e = sums.get(key);
-    if (e) {
-      e[0] += data[i];
-      e[1] += data[i + 1];
-      e[2] += data[i + 2];
-      e[3] += 1;
-    } else {
-      sums.set(key, [data[i], data[i + 1], data[i + 2], 1]);
-    }
+  const found = buildPalette(data, config.palette);
+  if (found && found.palette.length >= 1 && found.coverage >= config.flatCoverage) {
+    return {
+      // One refinement pass: with pixels already snapped to the palette the
+      // fills are exact, so more passes could only drift them.
+      tracer: { ...base, colorquantcycles: 1, numberofcolors: found.palette.length, pal: found.palette },
+      palette: found.palette,
+      snapTolerance: config.palette.snapTolerance,
+      smoothing: config.palette.smoothing,
+      mono: false,
+    };
   }
-  let best: [number, number, number, number] | null = null;
-  for (const s of sums.values()) {
-    if (!best || s[3] > best[3]) best = s;
-  }
-  if (!best) return null;
-  return [Math.round(best[0] / best[3]), Math.round(best[1] / best[3]), Math.round(best[2] / best[3])];
-}
-
-export function buildImageTracerOptions(
-  options: ConversionOptions,
-  imageData?: { data: Uint8ClampedArray }
-): ImageTracerOptions {
-  let colors =
-    options.colorMode === "bw" ? 2 : clampColors(options.numberOfColors);
-  // Only adapt when the user hasn't customized Advanced — an explicit
-  // choice always wins over the heuristic.
-  if (options.colorMode !== "bw" && options.numberOfColors === DEFAULT_COLORS && imageData) {
-    colors = Math.min(colors, estimatePaletteSize(imageData.data));
-  }
-  return {
-    numberofcolors: colors,
-    pathomit: DETAIL_PATHOMIT[options.detail],
-    ltres: SMOOTHNESS_TRES[options.smoothness],
-    qtres: SMOOTHNESS_TRES[options.smoothness],
-    ...FIXED,
-  };
+  return { tracer: { ...base, numberofcolors: config.palette.maxColors }, palette: null, snapTolerance: 0, smoothing: 0, mono: false };
 }

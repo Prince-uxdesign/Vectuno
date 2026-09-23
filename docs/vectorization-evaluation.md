@@ -380,3 +380,11 @@ dramatically cleaner output by default with no user action required, but a
 small amount of edge-boundary texture is an inherent cost of tracing a
 lossy-compressed edge and isn't fully removable without risking real
 silhouette softening.
+
+## Phase 4: presets and SVG cleanup (superseded settings)
+
+Phases 1-3 above describe the earlier Detail / Smoothness / Colors controls
+and the numbers behind them. Those controls were replaced by four presets
+(Clean, Balanced, Detailed, Monochrome) and an exact-palette pipeline; see
+the README's "Presets" and "SVG cleanup" sections for the current design and
+`scripts/preset-eval.mjs` for the measurements.

@@ -16,51 +16,23 @@ export const ACCEPTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"] as const;
 // accept.
 export const ACCEPT_ATTRIBUTE = [...ACCEPTED_MIME_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
 
-export type ColorMode = "color" | "bw";
-export type Level = "low" | "medium" | "high";
+// The four ways a designer can ask for a conversion. Each maps to a full
+// engine configuration (see lib/engine/presets.ts) — none is cosmetic.
+export type PresetId = "clean" | "balanced" | "detailed" | "monochrome";
+
+export const DEFAULT_PRESET: PresetId = "balanced";
 
 export interface ConversionOptions {
-  colorMode: ColorMode;
-  // Advanced/optional — only meaningful (and only shown) when colorMode is "color".
-  numberOfColors: number; // 2-64
-  // Which shapes get kept: low = only large/major shapes, high = keep small detail too.
-  detail: Level;
-  // How tightly traced curves follow the pixel boundary: low = precise/jagged,
-  // high = loose/simplified. Verified independent of `detail` — same shapes,
-  // fewer curve control points as smoothness increases.
-  smoothness: Level;
+  preset: PresetId;
+  // Advanced: a fixed number of colors (2-64), or null to let the preset
+  // decide from the image. Ignored by the Monochrome preset.
+  colorCount: number | null;
 }
 
-// numberOfColors default is 20, not a round 16, for a specific engine reason:
-// imagetracerjs's default palette seeding (colorsampling: 2) samples colors
-// from a sqrt(n)-by-sqrt(n) spatial grid over the image, not from its actual
-// color distribution. 16 produces an exact 4x4 grid; on artwork with several
-// small/thin same-size color regions (e.g. a multi-petal flower, dense thin
-// line art), that grid systematically lands most of its 16 sample points on
-// the dominant background and misses distinct smaller regions entirely — they
-// get absorbed into the nearest sampled color instead of getting their own
-// palette slot, which reads as "colors merging into each other." 20 forces a
-// 5x4 grid: finer sampling, verified (see docs/vectorization-evaluation.md
-// Phase 2) to fix that merging on affected
-// fixtures (pixel-error dropped ~65-99% on the two affected test images)
-// while being neutral-to-positive on logos/flat art that weren't affected.
 // A factory, not a shared constant object: useConverter and useBatchConverter
-// each use this as their initial `options` value, and a plain shared object
-// would mean both hooks' state starts out pointing at the exact same
-// reference — safe today since reducers always replace `options` wholesale,
-// but a footgun for any future code that mutates options in place.
+// each use this as their initial `options` value.
 export function createDefaultOptions(): ConversionOptions {
-  return {
-    colorMode: "color",
-    numberOfColors: 20,
-    // Designer-grade fidelity defaults: keep small details (pathomit 4) and
-    // follow edges precisely (ltres/qtres 0.2). Medium/Medium simplified
-    // thin line art into visibly skewed shapes — unacceptable side-by-side
-    // with the original for brand/UI work. Users who want smaller files can
-    // still dial Detail down / Smoothness up.
-    detail: "high",
-    smoothness: "low",
-  };
+  return { preset: DEFAULT_PRESET, colorCount: null };
 }
 
 export interface DecodedImage {

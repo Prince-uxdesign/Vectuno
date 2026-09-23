@@ -1,20 +1,30 @@
 import { AppError, ConversionCancelled, type ConversionOptions, type ConversionResult, type DecodedImage } from "../../types";
-import { buildImageTracerOptions, countDominantBins, DEFAULT_COLORS, dominantMeanColor, quantizationWidth } from "./presets";
-import { optimizeSvg } from "./optimizeSvg";
+import { optimizeSvg, type CleanupConfig } from "./optimizeSvg";
+import { getPreset, planTrace, type PresetConfig, type TracePlan } from "./presets";
 import type { VectorizeFailure, VectorizeRequest, VectorizeSuccess } from "./vectorize.worker";
 
 const WORKER_TIMEOUT_MS = 30_000;
+
+export interface RawTrace {
+  // The tracer's output: untouched when no `cleanup` was requested, otherwise
+  // already cleaned (the cleanup runs in the worker).
+  svg: string;
+  elapsedMs: number;
+  plan: TracePlan;
+}
 
 // imagetracerjs's imagedataToSVG is a single synchronous call with no
 // internal yield points — it cannot pause or report partial progress. The
 // only safe, reliable way to cancel is to discard the whole worker: each
 // conversion gets its own fresh Worker instance (see below), so terminating
 // it mid-run can't corrupt shared state or leave anything half-applied.
-export function vectorize(
+export function traceRaw(
   decoded: DecodedImage,
-  options: ConversionOptions,
-  signal?: AbortSignal
-): Promise<ConversionResult> {
+  config: PresetConfig,
+  colorCount: number | null,
+  signal?: AbortSignal,
+  clean?: { cleanup: CleanupConfig }
+): Promise<RawTrace> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new ConversionCancelled());
@@ -37,7 +47,7 @@ export function vectorize(
         new AppError(
           "VECTORIZE_FAILED",
           "This conversion is taking too long.",
-          "Try a smaller image, or lower the detail setting."
+          "Try a smaller image, or choose the Clean preset."
         )
       );
     }, WORKER_TIMEOUT_MS);
@@ -48,40 +58,15 @@ export function vectorize(
     };
     signal?.addEventListener("abort", onAbort);
 
+    const plan = planTrace(config, colorCount, decoded.imageData.data);
+
     worker.onmessage = (event: MessageEvent<VectorizeSuccess | VectorizeFailure>) => {
       cleanup();
       const msg = event.data;
       if (msg.ok) {
-        try {
-          // Snap the traced background to the source's measured dominant
-          // color so flat fills (milky near-whites especially) render
-          // exactly, not a few units drifted toward green/teal.
-          const dominant =
-            options.colorMode === "bw" ? null : dominantMeanColor(decoded.imageData.data);
-          const svg = optimizeSvg(msg.svg, dominant);
-          resolve({
-            svg,
-            sizeBytes: new Blob([svg]).size,
-            pathCount: (svg.match(/<path[\s/>]/g) ?? []).length,
-            elapsedMs: msg.elapsedMs,
-          });
-        } catch {
-          reject(
-            new AppError(
-              "VECTORIZE_FAILED",
-              "We couldn't finish preparing this image.",
-              "Try again, or choose a different image."
-            )
-          );
-        }
+        resolve({ svg: msg.svg, elapsedMs: msg.elapsedMs, plan });
       } else {
-        reject(
-          new AppError(
-            "VECTORIZE_FAILED",
-            "We couldn't convert this image.",
-            "Try again, or choose a different image."
-          )
-        );
+        reject(new AppError("VECTORIZE_FAILED", "We couldn't convert this image.", "Try again, or choose a different image."));
       }
     };
 
@@ -110,28 +95,46 @@ export function vectorize(
       );
     };
 
-    // Flat-art pipeline: when the user hasn't customized the Advanced colors
-    // slider, collapse JPEG ringing into dominant fills before tracing (see
-    // presets.quantizeToDominant). Gated on a small dominant-bin count so
-    // photos/gradients (hundreds of bins) take the untouched path with the
-    // user's palette size. Explicit slider choices always skip this.
-    const isDefaultColors =
-      options.colorMode !== "bw" && options.numberOfColors === DEFAULT_COLORS;
-    const dominantBins =
-      options.colorMode === "bw" ? Number.MAX_SAFE_INTEGER : countDominantBins(decoded.imageData.data);
-    const quantize = isDefaultColors && dominantBins <= 18;
-    const quantizeK = quantize ? quantizationWidth(decoded.imageData.data) : 0;
-    const baseOptions = buildImageTracerOptions(options, decoded.imageData);
     const request: VectorizeRequest = {
       imageData: {
         width: decoded.imageData.width,
         height: decoded.imageData.height,
         data: decoded.imageData.data,
       },
-      options: quantize ? { ...baseOptions, numberofcolors: quantizeK } : baseOptions,
-      quantize,
-      quantizeK,
+      options: plan.tracer,
+      cleanup: clean ? { cleanup: clean.cleanup, hasTransparency: decoded.hasTransparency, flat: plan.palette !== null } : undefined,
+      palette: plan.palette,
+      snapTolerance: plan.snapTolerance,
+      smoothing: plan.smoothing,
+      mono: plan.mono,
     };
     worker.postMessage(request);
   });
+}
+
+// Runs the configured cleanup over a raw trace. Exposed separately so the
+// evaluation harness can compare raw vs cleaned renderings.
+export function finalizeSvg(
+  rawSvg: string,
+  decoded: DecodedImage,
+  config: PresetConfig,
+  flat: boolean,
+  cleanup: CleanupConfig = config.cleanup
+): string {
+  return optimizeSvg(rawSvg, { cleanup, hasTransparency: decoded.hasTransparency, flat });
+}
+
+export async function vectorize(
+  decoded: DecodedImage,
+  options: ConversionOptions,
+  signal?: AbortSignal
+): Promise<ConversionResult> {
+  const config = getPreset(options.preset);
+  const { svg, elapsedMs } = await traceRaw(decoded, config, options.colorCount, signal, { cleanup: config.cleanup });
+  return {
+    svg,
+    sizeBytes: new Blob([svg]).size,
+    pathCount: (svg.match(/<path[\s/>]/g) ?? []).length,
+    elapsedMs,
+  };
 }
