@@ -1,5 +1,5 @@
 import { AppError, ConversionCancelled, type ConversionOptions, type ConversionResult, type DecodedImage } from "../../types";
-import { buildImageTracerOptions } from "./presets";
+import { buildImageTracerOptions, countDominantBins, DEFAULT_COLORS, quantizationWidth } from "./presets";
 import { optimizeSvg } from "./optimizeSvg";
 import type { VectorizeFailure, VectorizeRequest, VectorizeSuccess } from "./vectorize.worker";
 
@@ -105,13 +105,27 @@ export function vectorize(
       );
     };
 
+    // Flat-art pipeline: when the user hasn't customized the Advanced colors
+    // slider, collapse JPEG ringing into dominant fills before tracing (see
+    // presets.quantizeToDominant). Gated on a small dominant-bin count so
+    // photos/gradients (hundreds of bins) take the untouched path with the
+    // user's palette size. Explicit slider choices always skip this.
+    const isDefaultColors =
+      options.colorMode !== "bw" && options.numberOfColors === DEFAULT_COLORS;
+    const dominantBins =
+      options.colorMode === "bw" ? Number.MAX_SAFE_INTEGER : countDominantBins(decoded.imageData.data);
+    const quantize = isDefaultColors && dominantBins <= 18;
+    const quantizeK = quantize ? quantizationWidth(decoded.imageData.data) : 0;
+    const baseOptions = buildImageTracerOptions(options, decoded.imageData);
     const request: VectorizeRequest = {
       imageData: {
         width: decoded.imageData.width,
         height: decoded.imageData.height,
         data: decoded.imageData.data,
       },
-      options: buildImageTracerOptions(options, decoded.imageData),
+      options: quantize ? { ...baseOptions, numberofcolors: quantizeK } : baseOptions,
+      quantize,
+      quantizeK,
     };
     worker.postMessage(request);
   });
