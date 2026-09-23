@@ -81,7 +81,9 @@ function reducer(state: ConverterState, action: Action): ConverterState {
       }
       return { ...state, options: { ...state.options, ...action.options } };
     case "RESET":
-      return { ...initialState, options: state.options };
+      // "Change image" / "Convert another image" return to a genuinely fresh
+      // upload state — image, result, errors and settings all back to defaults.
+      return initialState;
     default:
       return state;
   }

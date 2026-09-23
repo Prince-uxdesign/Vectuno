@@ -70,7 +70,17 @@ export interface DecodedImage {
   processedWidth: number;
   processedHeight: number;
   wasDownsampled: boolean;
+  // Verified from the file's actual bytes (magic numbers), not its name or
+  // declared MIME — so the type shown to the user is the type it really is.
+  detectedMime: AcceptedMimeType;
+  // True only if at least one decoded pixel is not fully opaque.
+  hasTransparency: boolean;
 }
+
+// Preview-only backdrop behind a (possibly transparent) image or SVG. It is
+// applied purely as CSS on the preview frame and never touches image data or
+// the generated SVG.
+export type PreviewBackground = "checker" | "white" | "black";
 
 export interface ConversionResult {
   svg: string;

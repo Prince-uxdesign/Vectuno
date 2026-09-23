@@ -16,14 +16,22 @@ import { Container } from "./components/ui/Container";
 import { Section } from "./components/ui/Section";
 import { useConverter } from "./state/useConverter";
 import { useBatchConverter } from "./state/useBatchConverter";
+import { useImageIntake, type IntakeSource } from "./state/useImageIntake";
+import type { PreviewBackground } from "./types";
 
 const FALLBACK_ERROR_MESSAGE = "Something unexpected happened.";
 const FALLBACK_ERROR_HINT = "Try again, or choose a different image.";
+const DEFAULT_PREVIEW_BACKGROUND: PreviewBackground = "checker";
+const NOTICE_MS = 6000;
 
 function App() {
   const { state, loadFile, setOptions, convert, cancel, reset, setDragActive } = useConverter();
   const batch = useBatchConverter();
   const [rejectedCount, setRejectedCount] = useState(0);
+  const [previewBackground, setPreviewBackground] = useState<PreviewBackground>(DEFAULT_PREVIEW_BACKGROUND);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const uploadZoneRef = useRef<HTMLButtonElement>(null);
   const workspaceHeadingRef = useRef<HTMLHeadingElement>(null);
   const convertingHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -52,17 +60,13 @@ function App() {
   const showResult = !isBatchActive && state.stage === "success";
   const showError = !isBatchActive && state.stage === "error";
 
-  const handleUploadFiles = useCallback(
-    (files: File[]) => {
-      if (files.length > 1) {
-        const { rejected } = batch.addFiles(files);
-        setRejectedCount(rejected);
-      } else if (files.length === 1) {
-        loadFile(files[0]);
-      }
-    },
-    [batch, loadFile]
-  );
+  const showNotice = useCallback((message: string) => {
+    clearTimeout(noticeTimerRef.current);
+    setNotice(message);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), NOTICE_MS);
+  }, []);
+
+  useEffect(() => () => clearTimeout(noticeTimerRef.current), []);
 
   const handleAddToBatch = useCallback(
     (files: File[]) => {
@@ -76,6 +80,52 @@ function App() {
     setRejectedCount(0);
     batch.reset();
   }, [batch]);
+
+  // "Change image" / "Convert another image": back to a fresh upload state —
+  // image, result, errors, conversion settings and preview background.
+  const handleChangeImage = useCallback(() => {
+    reset();
+    setPreviewBackground(DEFAULT_PREVIEW_BACKGROUND);
+    setNotice(null);
+    setAnnouncement("");
+  }, [reset]);
+
+  // The single funnel for every input method (file picker, upload-zone drop,
+  // page-level drop, clipboard paste). Everything below this point —
+  // validation, decoding, preview, conversion — is shared.
+  const ingestFiles = useCallback(
+    (files: File[], source?: IntakeSource) => {
+      if (files.length === 0) return;
+      setNotice(null);
+      if (source === "paste") {
+        setAnnouncement(files.length > 1 ? `${files.length} images pasted from your clipboard.` : "Image pasted from your clipboard.");
+      }
+      if (isBatchActive || files.length > 1) {
+        // A single-image workspace can't coexist with a batch queue.
+        if (!isBatchActive && state.stage !== "empty" && state.stage !== "dragActive") reset();
+        const { rejected } = batch.addFiles(files);
+        setRejectedCount(rejected);
+      } else {
+        loadFile(files[0]);
+      }
+    },
+    [batch, isBatchActive, loadFile, reset, state.stage]
+  );
+
+  const handleUploadFiles = useCallback((files: File[]) => ingestFiles(files), [ingestFiles]);
+
+  // Page-level paste/drop is ignored while a conversion or decode is in
+  // flight so a stray paste can't clobber work in progress.
+  const intakeEnabled =
+    !batch.state.isProcessing &&
+    state.stage !== "converting" &&
+    state.stage !== "preparing" &&
+    state.stage !== "fileSelected";
+  useImageIntake({
+    enabled: intakeEnabled,
+    onFiles: ingestFiles,
+    onNothingToPaste: () => showNotice("No image found on your clipboard. Copy an image, then paste it here."),
+  });
 
   // Focus management for screen transitions. Each transition unmounts the
   // control the user was on, which would drop focus to <body>:
@@ -216,15 +266,21 @@ function App() {
               </h2>
               <div className="workspace workspace--split">
                 <div className="workspace__media">
-                  {state.previewUrl && <FilePreview previewUrl={state.previewUrl} onChangeImage={reset} />}
+                  {state.previewUrl && <FilePreview
+                      previewUrl={state.previewUrl}
+                      onChangeImage={handleChangeImage}
+                      background={state.decoded?.hasTransparency ? previewBackground : undefined}
+                      onBackgroundChange={state.decoded?.hasTransparency ? setPreviewBackground : undefined}
+                    />}
 
                   {state.file && (
                     <FileMetadata
                       name={state.file.name}
-                      mimeType={state.file.type}
+                      mimeType={state.decoded?.detectedMime ?? state.file.type}
                       sizeBytes={state.file.size}
                       width={state.decoded?.originalWidth ?? null}
                       height={state.decoded?.originalHeight ?? null}
+                      hasTransparency={state.decoded?.hasTransparency ?? false}
                     />
                   )}
 
@@ -244,7 +300,7 @@ function App() {
                       hint={state.errorHint ?? FALLBACK_ERROR_HINT}
                       recovery="retry"
                       onRetry={convert}
-                      onChooseNew={reset}
+                      onChooseNew={handleChangeImage}
                     />
                   ) : (
                     <ConversionStatus stage={state.stage} />
@@ -282,7 +338,9 @@ function App() {
                 sourceFilename={state.file.name}
                 result={state.result}
                 decoded={state.decoded}
-                onConvertAnother={reset}
+                onConvertAnother={handleChangeImage}
+                background={previewBackground}
+                onBackgroundChange={setPreviewBackground}
               />
             </Container>
           </Section>
@@ -296,7 +354,7 @@ function App() {
                 hint={state.errorHint ?? FALLBACK_ERROR_HINT}
                 recovery={state.errorRecovery ?? "chooseNew"}
                 onRetry={convert}
-                onChooseNew={reset}
+                onChooseNew={handleChangeImage}
               />
             </Container>
           </Section>
@@ -311,7 +369,7 @@ function App() {
             ? `Image ${state.file.name} loaded and ready to convert.`
             : state.stage === "success"
               ? "Vectorization complete. Preview and download are ready below."
-              : ""}
+              : announcement}
         </p>
 
         {isLanding && (
@@ -332,6 +390,7 @@ function App() {
                   isDragActive={state.stage === "dragActive"}
                   onFiles={handleUploadFiles}
                   onDragStateChange={setDragActive}
+                  notice={notice}
                 />
               </Container>
             </Section>

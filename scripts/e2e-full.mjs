@@ -297,7 +297,7 @@ async function testSequentialConversions() {
     if (file === "05-transparent.png") {
       ok(
         "sequential: transparent PNG shows checkerboard background",
-        await page.locator(".compare-slider__frame--checkerboard").isVisible()
+        await page.locator(".compare-slider__frame.preview-bg--checker").isVisible()
       );
     }
     await page.locator(".result-screen__actions .btn-secondary").click(); // "Convert another image"

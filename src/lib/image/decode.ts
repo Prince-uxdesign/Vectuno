@@ -1,5 +1,7 @@
 import { AppError, type DecodedImage } from "../../types";
 import { validateDimensions } from "./validate";
+import { sniffImageType } from "./sniff";
+import { hasTransparency } from "./transparency";
 
 // Measured on a 4000x3000 synthetic test image: ~5.8s of main-thread tracing work.
 // Downsampling before vectorization keeps conversions fast and SVGs reasonably
@@ -10,6 +12,18 @@ export async function decodeImage(
   file: File,
   maxProcessDimension: number = DEFAULT_MAX_PROCESS_DIMENSION
 ): Promise<DecodedImage> {
+  // Trust the bytes, not the name or declared MIME: a renamed text file or a
+  // paste with no type must be rejected here, and a JPEG saved as ".png"
+  // should be reported (and treated) as the JPEG it really is.
+  const detectedMime = await sniffImageType(file);
+  if (!detectedMime) {
+    throw new AppError(
+      "CORRUPTED_FILE",
+      "Vectuno couldn't read this image.",
+      "The file doesn't look like a real PNG, JPG, or WebP. Try exporting it again, then upload it."
+    );
+  }
+
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);
@@ -18,8 +32,8 @@ export async function decodeImage(
     // is a property of the file itself, not the browser's capabilities.
     throw new AppError(
       "CORRUPTED_FILE",
-      "This image couldn't be read — it may be corrupted or saved in an unsupported way.",
-      "Try exporting or saving the image again, then upload it."
+      "Vectuno couldn't read this image.",
+      "It may be corrupted or saved in an unsupported way. Try exporting it again, then upload it."
     );
   }
 
@@ -54,8 +68,6 @@ export async function decodeImage(
     // "washed-out + speckled" look. Speckle is handled downstream instead
     // (higher pathomit + deterministic tiny-path strip in optimizeSvg),
     // which removes dots without touching real edge colors.
-    const isJpeg = file.type === "image/jpeg" || /\.jpe?g$/i.test(file.name);
-    void isJpeg;
     ctx.drawImage(bitmap, 0, 0, processedWidth, processedHeight);
 
     let imageData: ImageData;
@@ -76,6 +88,9 @@ export async function decodeImage(
       processedWidth,
       processedHeight,
       wasDownsampled: scale < 1,
+      detectedMime,
+      // JPEG has no alpha channel, so skip the scan.
+      hasTransparency: detectedMime !== "image/jpeg" && hasTransparency(imageData),
     };
   } finally {
     bitmap.close();

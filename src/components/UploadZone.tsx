@@ -6,7 +6,12 @@ interface UploadZoneProps {
   isDragActive: boolean;
   onFiles: (files: File[]) => void;
   onDragStateChange: (active: boolean) => void;
+  // Transient, non-alarming message (e.g. nothing image-like on the clipboard).
+  notice?: string | null;
 }
+
+const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+const PASTE_SHORTCUT = IS_MAC ? "⌘V" : "Ctrl+V";
 
 function isDataTransferAcceptable(dataTransfer: DataTransfer): boolean {
   const items = Array.from(dataTransfer.items).filter((item) => item.kind === "file");
@@ -25,7 +30,7 @@ function isDataTransferAcceptable(dataTransfer: DataTransfer): boolean {
 // stays out of the tab order so keyboard users don't hit two controls for
 // the same action. Drag-and-drop only enhances the button.
 export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(function UploadZone(
-  { isDragActive, onFiles, onDragStateChange },
+  { isDragActive, onFiles, onDragStateChange, notice },
   forwardedRef
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +80,8 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
       }}
       onDrop={(e) => {
         e.preventDefault();
+        // Handled here; the page-level drop listener must not ingest it again.
+        e.stopPropagation();
         dragDepthRef.current = 0;
         onDragStateChange(false);
         setIsDragInvalid(false);
@@ -116,10 +123,16 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
           <span className="upload-zone__label">That file type isn't supported</span>
         ) : (
           <>
-            <span className="upload-zone__label">{isDragActive ? "Release to upload" : "Drop your images here"}</span>
-            <span className="upload-zone__sub">
+            <span className="upload-zone__label upload-zone__label--pointer">
+              {isDragActive ? "Release to upload" : "Drop your images here"}
+            </span>
+            <span className="upload-zone__label upload-zone__label--touch">Add images to convert</span>
+            <span className="upload-zone__sub upload-zone__sub--pointer">
               <span>or</span>
               <span className="upload-zone__browse">browse files</span>
+            </span>
+            <span className="upload-zone__browse-btn" aria-hidden="true">
+              Browse files
             </span>
           </>
         )}
@@ -127,11 +140,30 @@ export const UploadZone = forwardRef<HTMLButtonElement, UploadZoneProps>(functio
         <FileTypeHint className="upload-zone__hint" />
       </button>
 
+      <div className="upload-zone__guidance">
+        <p className="upload-zone__how">
+          <span className="upload-zone__how-pointer">
+            Drop an image, browse, or paste from your clipboard <kbd className="upload-zone__kbd">{PASTE_SHORTCUT}</kbd>
+          </span>
+          <span className="upload-zone__how-touch">Choose an image from your photos, files, or camera roll.</span>
+        </p>
+        <p className="upload-zone__best">Best for logos, icons, illustrations, and brand graphics.</p>
+        {notice && (
+          <p className="upload-zone__notice" role="status">
+            {notice}
+          </p>
+        )}
+      </div>
+
       {/* The visual label swap above (icon/text) isn't itself announced —
           a drag never moves focus, so a screen reader user gets no signal
           unless this transient state is pushed through a live region. */}
       <span className="visually-hidden" role="status" aria-live="assertive">
-        {isDragInvalid ? "That file type isn't supported. Accepts PNG, JPG, JPEG, or WebP." : ""}
+        {isDragInvalid
+          ? "That file type isn't supported. Accepts PNG, JPG, JPEG, or WebP."
+          : isDragActive
+            ? "Release to upload your image."
+            : ""}
       </span>
     </div>
   );

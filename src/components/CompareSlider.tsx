@@ -1,4 +1,5 @@
 import { useCallback, useId, useRef, useState } from "react";
+import type { PreviewBackground } from "../types";
 
 interface CompareSliderProps {
   originalUrl: string;
@@ -6,7 +7,8 @@ interface CompareSliderProps {
   svgMarkup: string;
   width: number;
   height: number;
-  transparent: boolean;
+  // Preview-only backdrop, or null for opaque images where it wouldn't show.
+  background: PreviewBackground | null;
 }
 
 const STEP = 5;
@@ -15,7 +17,7 @@ const STEP = 5;
 // a pointer: it's a native role="slider" (arrow keys / Home / End), and the
 // Original/Split/Vector buttons below give a no-drag way to reach every
 // state the handle can — see accessibility notes in the phase brief.
-export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width, height, transparent }: CompareSliderProps) {
+export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width, height, background }: CompareSliderProps) {
   const [position, setPosition] = useState(50);
   const frameRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -83,7 +85,7 @@ export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width,
     <div className="compare-slider">
       <div
         ref={frameRef}
-        className={`compare-slider__frame${transparent ? " compare-slider__frame--checkerboard" : ""}`}
+        className={`compare-slider__frame${background ? ` preview-bg preview-bg--${background}` : ""}`}
         // max-height alone (with width: 100%) can't shrink the box
         // proportionally — it just clips it, letterboxing the image
         // off-center. Deriving max-width from the same height budget via

@@ -77,9 +77,7 @@ function reducer(state: BatchState, action: Action): BatchState {
     case "SET_OPTIONS":
       return { ...state, options: { ...state.options, ...action.options } };
     case "RESET":
-      // Preserve user options like single-file RESET does — resetting the
-      // queue shouldn't wipe conversion settings.
-      return { ...initialState, options: state.options };
+      return initialState;
     default:
       return state;
   }

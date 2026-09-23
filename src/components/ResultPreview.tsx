@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ConversionResult, DecodedImage } from "../types";
-import { hasTransparency } from "../lib/image/transparency";
+import type { ConversionResult, DecodedImage, PreviewBackground } from "../types";
+import { BackgroundToggle } from "./BackgroundToggle";
 import { CompareSlider } from "./CompareSlider";
 import { ResultMetadata } from "./ResultMetadata";
 import { DownloadButton } from "./DownloadButton";
@@ -14,6 +14,8 @@ interface ResultPreviewProps {
   result: ConversionResult;
   decoded: DecodedImage;
   onConvertAnother: () => void;
+  background: PreviewBackground;
+  onBackgroundChange: (value: PreviewBackground) => void;
 }
 
 // A malformed/empty SVG can't crash dangerouslySetInnerHTML, so this is the
@@ -22,9 +24,9 @@ function isRenderableSvg(svg: string): boolean {
   return /<svg[\s>]/.test(svg) && svg.includes("</svg>");
 }
 
-export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decoded, onConvertAnother }: ResultPreviewProps) {
+export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decoded, onConvertAnother, background, onBackgroundChange }: ResultPreviewProps) {
   const [downloadFailed, setDownloadFailed] = useState(false);
-  const transparent = useMemo(() => hasTransparency(decoded.imageData), [decoded.imageData]);
+  const transparent = decoded.hasTransparency;
   const renderable = useMemo(() => isRenderableSvg(result.svg), [result.svg]);
   // The Convert button unmounts on success, so focus would be lost to <body>.
   // Moving it to the result heading announces the new screen to screen
@@ -52,7 +54,7 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
               svgMarkup={result.svg}
               width={decoded.originalWidth}
               height={decoded.originalHeight}
-              transparent={transparent}
+              background={transparent ? background : null}
             />
           ) : (
             <div className="result-screen__preview-error" role="alert">
@@ -71,6 +73,8 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
             sizeBytes={result.sizeBytes}
             pathCount={result.pathCount}
           />
+
+          {transparent && renderable && <BackgroundToggle value={background} onChange={onBackgroundChange} />}
 
           <div className="result-screen__actions">
             <DownloadButton svg={result.svg} sourceFilename={sourceFilename} onError={() => setDownloadFailed(true)} />

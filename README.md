@@ -63,6 +63,30 @@ booleans:
   files switches the whole screen to the batch workspace; a single file uses
   the single-image flow above.
 
+## Image input
+
+Every way of getting an image in — the file picker, dropping on the upload
+zone, dropping anywhere on the page, and pasting from the clipboard
+(Cmd/Ctrl+V) — is normalized to plain `File` objects and enters one
+pipeline: `validateFile` (type/size) → `decodeImage` (byte-signature check,
+decode, dimensions, transparency) → preview → the normal conversion flow.
+
+- **Paste** (`state/useImageIntake.ts`, `lib/input/clipboard.ts`): uses the
+  standard `paste` event, which needs no clipboard permission prompt.
+  Pasted images get a name like `pasted-image-20260923-101530.png`. Pasting
+  something that isn't an image shows a quiet notice; the normal upload
+  controls are unaffected.
+- **Validation**: the real format is identified from the file's leading
+  bytes (`lib/image/sniff.ts`), not its name or declared MIME, so a JPEG
+  saved as `.png` is reported as JPEG and a renamed text file is rejected.
+- **Info**: filename plus one quiet line (`PNG · 1200 × 800 · 248 KB`), and
+  "Transparency detected" only when a decoded pixel is actually non-opaque.
+- **Preview background** (`BackgroundToggle`): Checker / White / Black,
+  shown only for images with transparency. It is CSS on the preview frame
+  only; the source pixels and generated SVG are never touched.
+- **Change image / Convert another image** return to a fresh upload state,
+  including default conversion settings.
+
 ## Conversion settings
 
 Three core settings, mapped to `imagetracerjs` parameters that were verified
@@ -151,6 +175,7 @@ src/
     ui/                 Button, Container, Section — the shared primitives
     Navigation, Footer, Logo    sticky header; nav links collapse to Logo+CTA
                         <640px, with footer nav links as the mobile fallback
+    BackgroundToggle    preview-only Checker/White/Black backdrop control
     HowItWorks          3-step landing content, also the #how-it-works nav target
     UploadZone          click / drag-drop / mobile picker; distinguishes a
                         valid vs. unsupported drag (icon + text, not color alone)
@@ -190,6 +215,9 @@ npm run test:settings       # verify Detail/Smoothness are monotonic on real fix
                              # (fails the build if a future preset change breaks that)
 npm run test:e2e            # single-file user-journey suite: upload, convert, cancel,
                              # errors, settings changes, keyboard/touch, breakpoints
+npm run test:e2e-input      # picker, drag-and-drop, clipboard paste, validation,
+                             # transparency/background preview, reset flows, and
+                             # overflow/touch-target checks from 320px to 1920px
 npm run test:e2e-batch      # batch-specific journey: multi-file queue, remove, zip
 npm run test:e2e-stress     # forced-failure / flaky-worker resilience checks
 npm run test:visual         # screenshots + real DataTransfer drag events,

@@ -26,8 +26,8 @@ export function validateFile(file: File): void {
     if (!isAcceptedMime) {
       throw new AppError(
         "UNSUPPORTED_FILE",
-        "This file type isn't supported.",
-        "Use a PNG, JPG, JPEG, or WebP image instead."
+        "That file type isn't supported.",
+        "Use PNG, JPG, JPEG, or WebP."
       );
     }
   } else {
@@ -39,8 +39,8 @@ export function validateFile(file: File): void {
     if (!isAcceptedExt) {
       throw new AppError(
         "UNSUPPORTED_FILE",
-        "This file type isn't supported.",
-        "Use a PNG, JPG, JPEG, or WebP image instead."
+        "That file type isn't supported.",
+        "Use PNG, JPG, JPEG, or WebP."
       );
     }
   }
@@ -48,15 +48,15 @@ export function validateFile(file: File): void {
   if (file.size === 0) {
     throw new AppError(
       "CORRUPTED_FILE",
-      "This file appears to be empty or corrupted.",
+      "This file is empty.",
       "Try exporting or saving the image again, then upload it."
     );
   }
   if (file.size > MAX_FILE_BYTES) {
     throw new AppError(
       "FILE_TOO_LARGE",
-      `This file is too large to process in your browser (max ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)}MB).`,
-      "Try compressing it or choosing a smaller file."
+      `That image is too large (max ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)}MB).`,
+      "Try compressing it, exporting it smaller, or choosing another file."
     );
   }
 }
@@ -72,14 +72,14 @@ export function validateDimensions(width: number, height: number): void {
   if (width > MAX_DECODED_DIMENSION || height > MAX_DECODED_DIMENSION) {
     throw new AppError(
       "DIMENSIONS_TOO_LARGE",
-      `This image is too large to process in your browser (max ${MAX_DECODED_DIMENSION}px per side).`,
+      `That image is too large (max ${MAX_DECODED_DIMENSION}px per side).`,
       "Try a smaller image, or resize it before uploading."
     );
   }
   if (width * height > MAX_DECODED_PIXELS) {
     throw new AppError(
       "DIMENSIONS_TOO_LARGE",
-      "This image has too many pixels to process in your browser.",
+      "That image is too large — it has too many pixels to process in your browser.",
       "Try a smaller image, or resize it before uploading."
     );
   }
