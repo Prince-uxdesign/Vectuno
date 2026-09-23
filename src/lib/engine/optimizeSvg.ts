@@ -17,12 +17,19 @@ function addViewBox(svg: string): string {
 
 // Deterministic speckle strip: imagetracerjs with pathomit still emits
 // isolated micro-paths from JPEG ringing / dithered pixels (the "dots all
-// over the black" look). These are tiny in BOTH dimensions, unlike real
-// thin detail (whiskers, text strokes) which is long in at least one axis.
-// Parse each path's coordinate bbox from its d attribute and drop anything
-// smaller than minSize in both axes. Pure string/regex work — no DOM needed
-// (runs in the worker callback as well as tests).
+// over the black" look) plus thin edge-fringe slivers along high-contrast
+// boundaries. Two rules, both general (no color-specific logic):
+//   1. Drop anything smaller than minSize in BOTH axes (dots).
+//   2. Drop thin slivers: bbox area under minSize²/3 while the long side is
+//      still under minSize×2 (e.g. 1×16px pink fringe on a 1200px image).
+// Real detail survives either rule: eyes/fangs/text are compact but larger
+// than minSize, and whiskers/strokes are long in at least one axis with
+// real area behind them. Parse each path's coordinate bbox from its d
+// attribute. Pure string/regex work — no DOM needed (runs in the worker
+// callback as well as tests).
 function stripSpeckles(svg: string, minSize: number): string {
+  const areaLimit = (minSize * minSize) / 3;
+  const longLimit = minSize * 2;
   return svg.replace(/<path\b[^>]*\bd="([^"]*)"[^>]*\/?>/g, (tag, d: string) => {
     const nums = d.match(/-?\d+(?:\.\d+)?/g);
     if (!nums || nums.length < 4) return tag;
@@ -40,7 +47,10 @@ function stripSpeckles(svg: string, minSize: number): string {
       if (y > maxY) maxY = y;
     }
     if (!Number.isFinite(minX)) return tag;
-    if (maxX - minX < minSize && maxY - minY < minSize) return "";
+    const w = maxX - minX;
+    const h = maxY - minY;
+    if (w < minSize && h < minSize) return "";
+    if (w * h < areaLimit && Math.max(w, h) < longLimit) return "";
     return tag;
   });
 }
