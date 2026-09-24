@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { RootErrorBoundary } from './components/RootErrorBoundary.tsx'
+import { registerSW } from 'virtual:pwa-register'
+
+registerSW({ immediate: true })
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {
