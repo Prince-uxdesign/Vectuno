@@ -8,11 +8,12 @@ interface FigmaHandoffProps {
 
 type CopyState = "idle" | "copied" | "failed";
 
-// The honest Figma path: a browser page cannot reliably force-launch the
-// Figma desktop app, so instead of faking a deep link this copies the exact
-// generated SVG and tells the user the one step that matters — paste it into
-// Figma, where it arrives as editable vector layers.
+// Collapsible Figma handoff: the "Use in Figma" header is a dropdown toggle
+// that reveals the paste steps when expanded. The "Copy SVG for Figma"
+// button stays visible in both states so the action is never hidden behind
+// the collapsed steps.
 export function FigmaHandoff({ svg }: FigmaHandoffProps) {
+  const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<CopyState>("idle");
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -29,11 +30,30 @@ export function FigmaHandoff({ svg }: FigmaHandoffProps) {
 
   return (
     <section className="figma-handoff" aria-label="Use in Figma">
-      <h3 className="figma-handoff__heading">Use in Figma</h3>
-      <ol className="figma-handoff__steps">
-        <li>Copy the vector below.</li>
-        <li>In Figma, press Ctrl+V / ⌘V — it pastes as editable layers.</li>
-      </ol>
+      <button
+        type="button"
+        className="figma-handoff__toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="figma-handoff__heading">Use in Figma</span>
+        <svg
+          viewBox="0 0 24 24"
+          width="16"
+          height="16"
+          fill="none"
+          aria-hidden="true"
+          className={`figma-handoff__chevron${expanded ? " figma-handoff__chevron--open" : ""}`}
+        >
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {expanded && (
+        <ol className="figma-handoff__steps">
+          <li>Copy the vector below.</li>
+          <li>In Figma, press Ctrl+V / ⌘V — it pastes as editable layers.</li>
+        </ol>
+      )}
       <Button variant="secondary" className="figma-handoff__copy" onClick={handleCopy}>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
           <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.75" />
