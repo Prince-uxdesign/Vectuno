@@ -60,6 +60,34 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
   const stageWidth = requestedStageWidth === null ? null : Math.min(requestedStageWidth, MAX_STAGE_PX);
   const zoomCapped = requestedStageWidth !== null && requestedStageWidth > MAX_STAGE_PX;
 
+  // Keep zoom anchored to the middle of the viewport instead of the
+  // top-left/top-right corner: each width change re-centers scroll so the
+  // content appears to grow out of the center.
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const prevStageWidthRef = useRef<number | null>(null);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const prev = prevStageWidthRef.current;
+    prevStageWidthRef.current = stageWidth;
+    if (!viewport) return;
+    if (stageWidth === null) {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+      return;
+    }
+    if (prev === null) {
+      viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2);
+      viewport.scrollTop = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2);
+      return;
+    }
+    if (prev === stageWidth) return;
+    const ratio = stageWidth / prev;
+    const cx = viewport.scrollLeft + viewport.clientWidth / 2;
+    const cy = viewport.scrollTop + viewport.clientHeight / 2;
+    viewport.scrollLeft = Math.max(0, cx * ratio - viewport.clientWidth / 2);
+    viewport.scrollTop = Math.max(0, cy * ratio - viewport.clientHeight / 2);
+  }, [stageWidth]);
+
   const handleTabKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -135,7 +163,7 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
                 aria-labelledby={renderable ? "result-tab-preview" : undefined}
               >
                 {renderable ? (
-                  <div className="result-viewport">
+                  <div className="result-viewport" ref={viewportRef}>
                     <div
                       className="result-viewport__stage"
                       style={stageWidth !== null ? { width: `${stageWidth}px` } : undefined}

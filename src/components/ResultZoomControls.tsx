@@ -30,7 +30,7 @@ export function ZoomControls({ zoom, onChange, capped }: ZoomControlsProps) {
           className="zoom-controls__slider"
           min={MIN_ZOOM * 100}
           max={MAX_ZOOM * 100}
-          step={5}
+          step={1}
           value={percent}
           onChange={(event) => onChange(Number(event.target.value) / 100)}
           aria-labelledby={labelId}
