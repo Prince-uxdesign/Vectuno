@@ -1,6 +1,5 @@
 import { Logo } from "./Logo";
 import { Button } from "./ui/Button";
-import { usePwaInstall } from "../lib/usePwaInstall";
 
 interface NavigationProps {
   onStartConverting: () => void;
@@ -8,6 +7,9 @@ interface NavigationProps {
   isConvertMode?: boolean;
   onConvert?: () => void;
   canConvert?: boolean;
+  onPwaAction?: () => void;
+  pwaLabel?: string;
+  showPwaButton?: boolean;
 }
 
 export function Navigation({
@@ -16,9 +18,10 @@ export function Navigation({
   isConvertMode = false,
   onConvert,
   canConvert = false,
+  onPwaAction,
+  pwaLabel = "Download on your device",
+  showPwaButton = false,
 }: NavigationProps) {
-  const { isInstallable, install } = usePwaInstall();
-
   return (
     <header className="site-header">
       <div className="site-header__inner">
@@ -57,13 +60,13 @@ export function Navigation({
           </a>
         </nav>
 
-        <div className="site-header__actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {isInstallable && (
+        <div className="site-header__actions">
+          {showPwaButton && onPwaAction && (
             <Button
               variant="secondary"
-              className="site-header__install-btn"
-              onClick={install}
-              aria-label="Install Vectuno app on your device"
+              className="site-header__pwa-btn"
+              onClick={onPwaAction}
+              aria-label={pwaLabel}
             >
               <svg
                 width="14"
@@ -81,7 +84,10 @@ export function Navigation({
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Install App
+              <span className="pwa-btn__label-full">{pwaLabel}</span>
+              <span className="pwa-btn__label-short">
+                {pwaLabel.startsWith("Open") ? "Open app" : "Download app"}
+              </span>
             </Button>
           )}
 
