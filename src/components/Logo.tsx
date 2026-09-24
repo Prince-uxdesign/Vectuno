@@ -2,15 +2,13 @@ export function Logo() {
   return (
     <span className="logo">
       <span className="logo__mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M3 12 L9 4 L21 4 L15 12 L21 20 L9 20 Z"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        </svg>
+        <img
+          src={`${import.meta.env.BASE_URL}favicon.svg`}
+          alt=""
+          width="24"
+          height="23"
+          className="logo__mark-img"
+        />
       </span>
       <span className="logo__word">Vectuno</span>
     </span>
