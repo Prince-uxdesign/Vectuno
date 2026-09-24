@@ -36,6 +36,15 @@ export interface PresetConfig {
     colorquantcycles: number;
     // Decimal places kept in coordinates.
     roundcoords: number;
+    // Same-color outline width painted around every shape. Each color layer
+    // is curve-fitted independently, so abutting regions can leave hairline
+    // gaps with the page showing through (white dots along edges). A 1px
+    // same-color stroke bleeds 0.5px over whatever is behind each edge and
+    // seals those gaps; boundaries shift by at most half a pixel toward the
+    // shape painted underneath. Zero for Monochrome: a single compound path
+    // has no inter-shape seams to seal, and a stroke would only fatten the
+    // silhouette and shrink counters.
+    strokewidth: number;
   };
   // How the image's real fills are found (see analysis.buildPalette).
   palette: PaletteSpec;
@@ -61,7 +70,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "clean",
     label: "Clean",
     description: "Best for logos and simple graphics.",
-    tracer: { pathomit: 20, ltres: 1.5, qtres: 1.5, colorquantcycles: 5, roundcoords: 1 },
+    tracer: { pathomit: 20, ltres: 1.5, qtres: 1.5, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
     palette: { maxColors: 8, minShare: 0.005, mergeDistance: 40, snapTolerance: 28, smoothing: 1 },
     flatCoverage: 0.88,
     monochrome: false,
@@ -76,7 +85,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "balanced",
     label: "Balanced",
     description: "Great for most images.",
-    tracer: { pathomit: 8, ltres: 0.6, qtres: 0.6, colorquantcycles: 5, roundcoords: 1 },
+    tracer: { pathomit: 8, ltres: 0.6, qtres: 0.6, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
     palette: { maxColors: 20, minShare: 0.003, mergeDistance: 28, snapTolerance: 36, smoothing: 0 },
     flatCoverage: 0.9,
     monochrome: false,
@@ -91,7 +100,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "detailed",
     label: "Detailed",
     description: "Preserve more visual detail.",
-    tracer: { pathomit: 10, ltres: 0.3, qtres: 0.3, colorquantcycles: 5, roundcoords: 1 },
+    tracer: { pathomit: 10, ltres: 0.3, qtres: 0.3, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
     palette: { maxColors: 32, minShare: 0.002, mergeDistance: 24, snapTolerance: 36, smoothing: 0 },
     flatCoverage: 0.92,
     monochrome: false,
@@ -106,7 +115,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "monochrome",
     label: "Monochrome",
     description: "Create a single-color vector.",
-    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, colorquantcycles: 1, roundcoords: 1 },
+    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, colorquantcycles: 1, roundcoords: 1, strokewidth: 0 },
     palette: { maxColors: 2, minShare: 0, mergeDistance: 0, snapTolerance: 0, smoothing: 0 },
     flatCoverage: 1,
     monochrome: true,
@@ -154,7 +163,7 @@ export function planTrace(config: PresetConfig, colorCount: number | null, data:
     blurradius: 0,
     blurdelta: 20,
     rightangleenhance: true,
-    strokewidth: 0,
+    strokewidth: config.tracer.strokewidth,
   } as const;
 
   if (config.monochrome) {

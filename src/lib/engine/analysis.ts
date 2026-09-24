@@ -36,6 +36,22 @@ export interface PaletteResult {
 
 const ALPHA_CUTOFF = 24;
 
+// Second-chance inclusion for small but genuinely distinct fills (a red mouth
+// on a black cat, a white eye glint). The minShare floor exists to keep
+// anti-aliasing and JPEG ringing out of the palette — but those always sit
+// CLOSE to a real fill in color space, while a true accent sits far from
+// everything. A rejected bin earns a leftover slot only if it is farther than
+// this (RGB distance) from every accepted color...
+const RESCUE_DISTANCE = 70;
+// ...and still covers this share of sampled pixels, so single-pixel noise,
+// dither scatter and stray compression specks can't claim slots either.
+// 0.02% is ~10x below the smallest preset minShare: strictly a safety net.
+const RESCUE_MIN_SHARE = 0.0002;
+
+function dist4(a: PaletteColor, b: PaletteColor): number {
+  return (a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2 + (a.a - b.a) ** 2;
+}
+
 function sampleStride(pixelCount: number): number {
   return Math.max(1, Math.floor(pixelCount / 250_000));
 }
@@ -77,8 +93,9 @@ export function buildPalette(data: Uint8ClampedArray, spec: PaletteSpec): Palett
   }
   if (total === 0) return null;
 
-  const candidates = [...bins.values()]
-    .filter((b) => b.count / total >= spec.minShare)
+  // Resolve every sampled bin to a single color first; the share floor is
+  // applied below, and bins that miss it still get a second chance (rescue).
+  const colored = [...bins.values()]
     .sort((a, b) => b.count - a.count)
     .map((bin) => {
       let bestPacked = 0;
@@ -101,6 +118,8 @@ export function buildPalette(data: Uint8ClampedArray, spec: PaletteSpec): Palett
       return { color, count: bin.count };
     });
 
+  const candidates = colored.filter((c) => c.count / total >= spec.minShare);
+
   // Merge near-identical colors into the larger one (ringing bands, dithering).
   const accepted: { color: PaletteColor; count: number }[] = [];
   const limit = spec.mergeDistance * spec.mergeDistance;
@@ -108,8 +127,7 @@ export function buildPalette(data: Uint8ClampedArray, spec: PaletteSpec): Palett
     let host: { color: PaletteColor; count: number } | null = null;
     let best = Number.MAX_SAFE_INTEGER;
     for (const a of accepted) {
-      const d =
-        (c.color.r - a.color.r) ** 2 + (c.color.g - a.color.g) ** 2 + (c.color.b - a.color.b) ** 2 + (c.color.a - a.color.a) ** 2;
+      const d = dist4(c.color, a.color);
       if (d < best) {
         best = d;
         host = a;
@@ -119,6 +137,22 @@ export function buildPalette(data: Uint8ClampedArray, spec: PaletteSpec): Palett
     else accepted.push({ color: c.color, count: c.count });
   }
   const kept = accepted.sort((a, b) => b.count - a.count).slice(0, spec.maxColors);
+
+  // Rescue: small distinct accents the share floor rejected. Only leftover
+  // slots are used, largest first, so the primary palette is untouched and a
+  // genuinely busy image (no free slots) behaves exactly as before.
+  if (kept.length < spec.maxColors) {
+    const rescueLimit = RESCUE_DISTANCE * RESCUE_DISTANCE;
+    for (const c of colored) {
+      if (kept.length >= spec.maxColors) break;
+      if (c.count / total < RESCUE_MIN_SHARE) break; // sorted desc: nothing smaller qualifies
+      if (c.count / total >= spec.minShare) continue; // already accepted or merged
+      const far = kept.every((k) => dist4(c.color, k.color) > rescueLimit);
+      if (far) kept.push({ color: c.color, count: c.count });
+    }
+    kept.sort((a, b) => b.count - a.count);
+  }
+
   const palette = kept.map((k) => k.color);
   // Coverage = share of sampled pixels that sit on one of the fills (within
   // the snap tolerance). Lossy sources smear each fill across several coarse
