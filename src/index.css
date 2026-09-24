@@ -2264,45 +2264,53 @@ summary:focus-visible,
   margin-inline: auto;
 }
 
-/* Zoom toolbar: stepper (− / level / +) plus Fit–400% presets. */
+/* Zoom slider: 80% of the comparison card width, centered. */
 .zoom-controls {
+  width: 80%;
+  margin-inline: auto;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.zoom-controls__stepper {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
-.zoom-controls__step {
-  min-width: 48px;
-  min-height: 44px;
-  padding-inline: var(--space-3);
+.zoom-controls__slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.zoom-controls__slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--fg);
+  height: 28px;
+}
+
+.zoom-controls__slider::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+}
+
+.zoom-controls__slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: none;
 }
 
 .zoom-controls__level {
   min-width: 56px;
-  text-align: center;
+  text-align: right;
   font-weight: 600;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.zoom-controls__presets {
-  flex: 1 1 auto;
-  min-width: min(100%, 280px);
-}
-
 .zoom-controls__note {
-  flex-basis: 100%;
   margin: 0;
   font-size: var(--text-xs);
   color: var(--muted);
+  text-align: center;
 }
 
 /* Zoom viewport: fixed zoom levels grow the stage inside a scrollable frame
@@ -2441,10 +2449,34 @@ summary:focus-visible,
   padding: var(--space-4) var(--space-5);
 }
 
+.figma-handoff__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+}
+
 .figma-handoff__heading {
   margin: 0;
   font-size: var(--text-sm);
   font-weight: 600;
+}
+
+.figma-handoff__chevron {
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.figma-handoff__chevron--open {
+  transform: rotate(180deg);
 }
 
 .figma-handoff__steps {

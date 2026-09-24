@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConversionResult, DecodedImage, PreviewBackground } from "../types";
 import { extractPalette } from "../lib/svg/inspect";
-import { BackgroundToggle } from "./BackgroundToggle";
 import { CompareSlider } from "./CompareSlider";
 import { ResultMetadata } from "./ResultMetadata";
 import { DownloadButton } from "./DownloadButton";
 import { CopySvgButton } from "./CopySvgButton";
-import { OpenSvgButton } from "./OpenSvgButton";
 import { FigmaHandoff } from "./FigmaHandoff";
 import { SvgPalette } from "./SvgPalette";
 import { SvgCodeViewer } from "./SvgCodeViewer";
-import { ZoomControls, type ZoomLevel } from "./ResultZoomControls";
+import { ZoomControls, MIN_ZOOM } from "./ResultZoomControls";
 import { RasterExportButtons } from "./RasterExportButtons";
 import { Button } from "./ui/Button";
 
@@ -21,13 +19,13 @@ interface ResultPreviewProps {
   decoded: DecodedImage;
   onConvertAnother: () => void;
   background: PreviewBackground;
-  onBackgroundChange: (value: PreviewBackground) => void;
+  onBackgroundChange?: (value: PreviewBackground) => void;
 }
 
 type Tab = "preview" | "code";
 
 // Upper bound for the zoomed stage so extreme combinations (large source ×
-// 400%) can't stretch the page or exhaust layout memory — the viewport
+// 200%) can't stretch the page or exhaust layout memory — the viewport
 // scrolls instead, and the user is told the zoom was capped.
 const MAX_STAGE_PX = 8000;
 
@@ -37,11 +35,10 @@ function isRenderableSvg(svg: string): boolean {
   return /<svg[\s>]/.test(svg) && svg.includes("</svg>");
 }
 
-export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decoded, onConvertAnother, background, onBackgroundChange }: ResultPreviewProps) {
+export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decoded, onConvertAnother, background }: ResultPreviewProps) {
   const [downloadFailed, setDownloadFailed] = useState(false);
-  const [openBlocked, setOpenBlocked] = useState(false);
   const [tab, setTab] = useState<Tab>("preview");
-  const [zoom, setZoom] = useState<ZoomLevel>("fit");
+  const [zoom, setZoom] = useState<number>(MIN_ZOOM);
   const renderable = useMemo(() => isRenderableSvg(result.svg), [result.svg]);
   // Derived from the exact markup the preview renders and the download
   // saves — one memoized pass, no duplicated SVG strings.
@@ -54,11 +51,11 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
     headingRef.current?.focus();
   }, []);
 
-  const handleBlocked = useCallback(() => setOpenBlocked(true), []);
-
-  // Fixed zoom levels render at multiples of the natural pixel size inside a
-  // scrollable viewport: the artwork gets bigger, the page doesn't.
-  const scale = zoom === "fit" ? null : zoom;
+  // Slider zoom (100%–200%) renders at multiples of the natural pixel size
+  // inside a scrollable viewport: the artwork gets bigger, the page doesn't.
+  // At exactly 100% the stage stays responsive (fit); above that the zoomed
+  // width owns the sizing.
+  const scale = zoom <= MIN_ZOOM ? null : zoom;
   const requestedStageWidth = scale === null ? null : Math.round(decoded.originalWidth * scale);
   const stageWidth = requestedStageWidth === null ? null : Math.min(requestedStageWidth, MAX_STAGE_PX);
   const zoomCapped = requestedStageWidth !== null && requestedStageWidth > MAX_STAGE_PX;
@@ -164,11 +161,6 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
                 )}
               </div>
 
-              {renderable && (
-                <div className="result-screen__bg">
-                  <BackgroundToggle value={background} onChange={onBackgroundChange} />
-                </div>
-              )}
             </>
           )}
         </div>
@@ -195,16 +187,8 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
           )}
 
           <div className="result-screen__secondary">
-            <OpenSvgButton svg={result.svg} onBlocked={handleBlocked} />
             <FigmaHandoff svg={result.svg} />
           </div>
-
-          {openBlocked && (
-            <p className="app-error" role="alert">
-              Couldn't open the SVG in a new tab — a popup blocker may have stopped it. Use Download SVG or
-              Copy SVG code instead.
-            </p>
-          )}
 
           <details className="result-details" open>
             <summary className="result-details__summary">Technical details</summary>
