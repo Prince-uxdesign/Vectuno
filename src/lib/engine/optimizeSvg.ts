@@ -258,6 +258,25 @@ function stripDeadStrokes(svg: string): string {
   return svg.replace(/\s*stroke="[^"]*"\s*stroke-width="0"/g, "");
 }
 
+// Gap-sealing strokes (see PresetConfig.strokewidth) help large shapes but
+// harm small/thin geometry: a 1px stroke doubles a pinstripe's visual weight
+// and paints a small shape's curve wobble in solid color instead of letting
+// the renderer anti-alias it smooth. So keep live strokes only on paths with
+// a sizable bounding box. A small shape's own seams are sub-pixel, and any
+// gap visible at its edge is covered by its (larger, still stroked) neighbor
+// bleeding over it — never by the page showing through.
+const SEAL_MIN_BBOX_AREA = 2500;
+
+function limitSealStrokes(svg: string): string {
+  return svg.replace(/<path\b[^>]*>/g, (tag) => {
+    if (!/\sstroke-width="1"/.test(tag)) return tag;
+    const box = pathBox(dOf(tag));
+    if (!box) return tag;
+    if ((box.maxX - box.minX) * (box.maxY - box.minY) >= SEAL_MIN_BBOX_AREA) return tag;
+    return tag.replace(/\s*stroke="[^"]*"/, "").replace(/\s*stroke-width="[^"]*"/, "");
+  });
+}
+
 // Paths the tracer emits for fully transparent regions paint nothing.
 function dropInvisiblePaths(svg: string): string {
   return svg.replace(/<path\b[^>]*\sopacity="0(?:\.0+)?"[^>]*>/g, "");
@@ -337,6 +356,7 @@ export function optimizeSvg(svg: string, input: OptimizeInput): string {
   }
   if (cleanup.stackShapes && !input.hasTransparency) out = stackShapes(out);
   out = stripDeadStrokes(out);
+  out = limitSealStrokes(out);
   if (cleanup.compactColors) out = compactColors(out);
   return out;
 }

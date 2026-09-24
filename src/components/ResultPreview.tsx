@@ -9,7 +9,6 @@ import { FigmaHandoff } from "./FigmaHandoff";
 import { SvgPalette } from "./SvgPalette";
 import { SvgCodeViewer } from "./SvgCodeViewer";
 import { ZoomControls, MIN_ZOOM } from "./ResultZoomControls";
-import { RasterExportButtons } from "./RasterExportButtons";
 import { Button } from "./ui/Button";
 
 interface ResultPreviewProps {
@@ -200,12 +199,6 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
               Convert another image
             </Button>
             <CopySvgButton svg={result.svg} />
-            <RasterExportButtons
-              svg={result.svg}
-              width={decoded.originalWidth}
-              height={decoded.originalHeight}
-              sourceFilename={sourceFilename}
-            />
           </div>
 
           {downloadFailed && (

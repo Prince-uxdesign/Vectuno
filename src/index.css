@@ -2340,6 +2340,7 @@ summary:focus-visible,
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
   min-height: 48px;
   font-size: var(--text-sm);
@@ -2352,18 +2353,20 @@ summary:focus-visible,
   display: none;
 }
 
-.result-details__summary::before {
+.result-details__summary::after {
   content: "";
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
+  margin-right: 4px;
+  border-right: 1.75px solid currentColor;
+  border-bottom: 1.75px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
   transition: transform var(--duration-fast) var(--ease);
 }
 
-.result-details[open] .result-details__summary::before {
-  transform: rotate(45deg);
+.result-details[open] .result-details__summary::after {
+  transform: translateY(2px) rotate(-135deg);
 }
 
 .result-details .result-metadata {
