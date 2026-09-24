@@ -15,9 +15,12 @@ import { ErrorState } from "./components/ErrorState";
 import { BatchWorkspace } from "./components/BatchWorkspace";
 import { Container } from "./components/ui/Container";
 import { Section } from "./components/ui/Section";
+import { Button } from "./components/ui/Button";
+import { PwaInstallModal } from "./components/PwaInstallModal";
 import { useConverter } from "./state/useConverter";
 import { useBatchConverter } from "./state/useBatchConverter";
 import { useImageIntake, type IntakeSource } from "./state/useImageIntake";
+import { usePwaInstall } from "./lib/usePwaInstall";
 import { analyzeQuality } from "./lib/image/quality";
 import { PRESETS } from "./lib/engine/presets";
 import type { PreviewBackground, PresetId } from "./types";
@@ -30,6 +33,7 @@ const NOTICE_MS = 6000;
 function App() {
   const { state, loadFile, setOptions, convert, cancel, reset, setDragActive } = useConverter();
   const batch = useBatchConverter();
+  const pwa = usePwaInstall();
   const [rejectedCount, setRejectedCount] = useState(0);
   const [previewBackground, setPreviewBackground] = useState<PreviewBackground>(DEFAULT_PREVIEW_BACKGROUND);
   const [notice, setNotice] = useState<string | null>(null);
@@ -247,6 +251,8 @@ function App() {
     [isLanding, reset, handleBatchReset, performScroll]
   );
 
+  const pwaButtonText = pwa.isAppDownloaded ? "Open app on your device" : "Download on your device";
+
   return (
     <div className="app-shell" id="top">
       <Navigation
@@ -255,6 +261,9 @@ function App() {
         isConvertMode={showWorkspace}
         onConvert={convert}
         canConvert={state.stage === "ready" || isRetryableError}
+        onPwaAction={pwa.handlePwaAction}
+        pwaLabel={pwaButtonText}
+        showPwaButton={!pwa.isStandalone}
       />
 
       <main className="app-main">
@@ -267,6 +276,37 @@ function App() {
                   Upload a PNG, JPG, or WebP and get a crisp, editable SVG back — converted entirely in your
                   browser. Nothing is uploaded to a server.
                 </p>
+                <div className="hero__actions">
+                  <Button variant="primary" className="hero__cta-primary" onClick={scrollToUpload}>
+                    Start converting
+                  </Button>
+                  {!pwa.isStandalone && (
+                    <Button
+                      variant="secondary"
+                      className="hero__cta-secondary"
+                      onClick={pwa.handlePwaAction}
+                      aria-label={pwaButtonText}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        style={{ marginRight: 8, display: "inline-block", verticalAlign: "middle" }}
+                      >
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      {pwaButtonText}
+                    </Button>
+                  )}
+                </div>
               </div>
             </Container>
 
@@ -454,6 +494,13 @@ function App() {
       </main>
 
       <Footer onNavigateToSection={handleNavigate} />
+
+      <PwaInstallModal
+        isOpen={pwa.showModal}
+        onClose={pwa.closeModal}
+        isAppDownloaded={pwa.isAppDownloaded}
+        platform={pwa.platform}
+      />
     </div>
   );
 }
