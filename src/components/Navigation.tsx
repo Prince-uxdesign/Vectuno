@@ -37,28 +37,6 @@ export function Navigation({
           <Logo />
         </a>
 
-        <nav className="site-nav" aria-label="Primary">
-          <a
-            href="#how-it-works"
-            className="site-nav__link"
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigateToSection("how-it-works");
-            }}
-          >
-            How it works
-          </a>
-          <a
-            href="#about"
-            className="site-nav__link"
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigateToSection("about");
-            }}
-          >
-            About
-          </a>
-        </nav>
 
         <div className="site-header__actions">
           {showPwaButton && onPwaAction && (
