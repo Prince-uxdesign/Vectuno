@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ConversionResult, DecodedImage, PreviewBackground } from "../types";
 import { extractPalette } from "../lib/svg/inspect";
 import { CompareSlider } from "./CompareSlider";
@@ -50,41 +50,83 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
     headingRef.current?.focus();
   }, []);
 
-  // Slider zoom (100%–200%) renders at multiples of the natural pixel size
-  // inside a scrollable viewport: the artwork gets bigger, the page doesn't.
-  // At exactly 100% the stage stays responsive (fit); above that the zoomed
-  // width owns the sizing.
-  const scale = zoom <= MIN_ZOOM ? null : zoom;
-  const requestedStageWidth = scale === null ? null : Math.round(decoded.originalWidth * scale);
+  // Slider zoom (100%–200%) is relative to the on-screen "fit" size, not the
+  // image's natural pixel size. Scaling from natural size made 100%→101% a
+  // sudden jump (huge images leapt to thousands of px, tiny ones shrank), and
+  // drove large images to multi-thousand-px stages whose paint layers mobile
+  // browsers drop — the artwork then vanished when zooming back out. Scaling
+  // the fit width keeps the zoom continuous and the stage a sane size.
+  const comparisonRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [fitWidth, setFitWidth] = useState<number | null>(null);
+  const aspect = decoded.originalWidth / decoded.originalHeight;
+  const showsViewport = renderable && tab === "preview";
+  useLayoutEffect(() => {
+    const container = comparisonRef.current;
+    const viewport = viewportRef.current;
+    if (!showsViewport || !container || !viewport) return;
+    // Mirrors the fit-mode frame: full column width, capped by the same
+    // height budget (the viewport's max-height) through the image's ratio.
+    // Measured on the column, not the viewport, so scrollbars appearing
+    // while zoomed can't feed back into the base size.
+    const measure = () => {
+      const maxHeight = parseFloat(getComputedStyle(viewport).maxHeight);
+      const byHeight = Number.isFinite(maxHeight) ? maxHeight * aspect : Infinity;
+      const next = Math.floor(Math.min(container.clientWidth, byHeight));
+      setFitWidth(next > 0 ? next : null);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    // The height budget is vh-based, so height-only resizes matter too.
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [showsViewport, aspect]);
+
+  const requestedStageWidth = zoom <= MIN_ZOOM || fitWidth === null ? null : Math.round(fitWidth * zoom);
   const stageWidth = requestedStageWidth === null ? null : Math.min(requestedStageWidth, MAX_STAGE_PX);
   const zoomCapped = requestedStageWidth !== null && requestedStageWidth > MAX_STAGE_PX;
 
-  // Keep zoom anchored to the middle of the viewport instead of the
-  // top-left/top-right corner: each width change re-centers scroll so the
-  // content appears to grow out of the center.
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const prevStageWidthRef = useRef<number | null>(null);
-  useEffect(() => {
+  // Keep zoom anchored on whatever point sits in the middle of the viewport.
+  // The anchor is tracked as a fraction of the scrollable content (updated on
+  // user scrolls) rather than re-derived from scrollLeft after each resize —
+  // by then the browser has already clamped scrollLeft to the smaller
+  // content, so zooming out used to drift the view off the artwork.
+  const anchorRef = useRef({ x: 0.5, y: 0.5 });
+  const programmaticScrollRef = useRef<{ left: number; top: number } | null>(null);
+  const handleViewportScroll = useCallback(() => {
     const viewport = viewportRef.current;
-    const prev = prevStageWidthRef.current;
-    prevStageWidthRef.current = stageWidth;
+    if (!viewport) return;
+    const expected = programmaticScrollRef.current;
+    if (expected && Math.abs(viewport.scrollLeft - expected.left) < 1 && Math.abs(viewport.scrollTop - expected.top) < 1) {
+      return;
+    }
+    programmaticScrollRef.current = null;
+    anchorRef.current = {
+      x: (viewport.scrollLeft + viewport.clientWidth / 2) / viewport.scrollWidth,
+      y: (viewport.scrollTop + viewport.clientHeight / 2) / viewport.scrollHeight,
+    };
+  }, []);
+
+  // Layout effect, not a plain effect: the scroll correction lands in the
+  // same frame as the resize, so the artwork never flashes off-center.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
     if (!viewport) return;
     if (stageWidth === null) {
+      anchorRef.current = { x: 0.5, y: 0.5 };
       viewport.scrollLeft = 0;
       viewport.scrollTop = 0;
+      programmaticScrollRef.current = { left: 0, top: 0 };
       return;
     }
-    if (prev === null) {
-      viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2);
-      viewport.scrollTop = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2);
-      return;
-    }
-    if (prev === stageWidth) return;
-    const ratio = stageWidth / prev;
-    const cx = viewport.scrollLeft + viewport.clientWidth / 2;
-    const cy = viewport.scrollTop + viewport.clientHeight / 2;
-    viewport.scrollLeft = Math.max(0, cx * ratio - viewport.clientWidth / 2);
-    viewport.scrollTop = Math.max(0, cy * ratio - viewport.clientHeight / 2);
+    const { x, y } = anchorRef.current;
+    viewport.scrollLeft = x * viewport.scrollWidth - viewport.clientWidth / 2;
+    viewport.scrollTop = y * viewport.scrollHeight - viewport.clientHeight / 2;
+    programmaticScrollRef.current = { left: viewport.scrollLeft, top: viewport.scrollTop };
   }, [stageWidth]);
 
   const handleTabKeyDown = useCallback(
@@ -156,13 +198,14 @@ export function ResultPreview({ sourcePreviewUrl, sourceFilename, result, decode
               </div>
 
               <div
+                ref={comparisonRef}
                 className="result-screen__comparison"
                 role={renderable ? "tabpanel" : undefined}
                 id={renderable ? "result-panel-preview" : undefined}
                 aria-labelledby={renderable ? "result-tab-preview" : undefined}
               >
                 {renderable ? (
-                  <div className="result-viewport" ref={viewportRef}>
+                  <div className="result-viewport" ref={viewportRef} onScroll={handleViewportScroll}>
                     <div
                       className="result-viewport__stage"
                       style={stageWidth !== null ? { width: `${stageWidth}px` } : undefined}

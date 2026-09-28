@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 export type ZoomLevel = number;
 
@@ -15,9 +15,39 @@ export const MAX_ZOOM = 2;
 // artwork inside a scrollable viewport, so the page layout never breaks no
 // matter how far in the user goes. Native range input: keyboard/touch
 // accessible, current level announced through a live region.
+//
+// The thumb and label follow the pointer immediately from local state, while
+// the (layout-heavy) zoom itself is committed at most once per animation
+// frame — a fast drag fires input events far quicker than the artwork can
+// re-lay out, and applying every one of them is what made dragging stutter.
 export function ZoomControls({ zoom, onChange, capped }: ZoomControlsProps) {
   const labelId = useId();
-  const percent = Math.round(zoom * 100);
+  const [percent, setPercent] = useState(() => Math.round(zoom * 100));
+  const pendingRef = useRef<number | null>(null);
+  const frameRef = useRef(0);
+
+  // External zoom changes (e.g. a reset) still move the thumb.
+  useEffect(() => {
+    if (pendingRef.current === null) setPercent(Math.round(zoom * 100));
+  }, [zoom]);
+
+  useEffect(() => () => cancelAnimationFrame(frameRef.current), []);
+
+  const handleInput = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const next = Number(event.target.value);
+      setPercent(next);
+      pendingRef.current = next;
+      if (frameRef.current) return;
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = 0;
+        const value = pendingRef.current;
+        pendingRef.current = null;
+        if (value !== null) onChange(value / 100);
+      });
+    },
+    [onChange]
+  );
 
   return (
     <div className="zoom-controls">
@@ -32,7 +62,7 @@ export function ZoomControls({ zoom, onChange, capped }: ZoomControlsProps) {
           max={MAX_ZOOM * 100}
           step={1}
           value={percent}
-          onChange={(event) => onChange(Number(event.target.value) / 100)}
+          onChange={handleInput}
           aria-labelledby={labelId}
           aria-valuetext={`${percent}%`}
         />

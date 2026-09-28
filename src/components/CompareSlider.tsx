@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState } from "react";
+import { memo, useCallback, useId, useRef, useState } from "react";
 import type { PreviewBackground } from "../types";
 
 interface CompareSliderProps {
@@ -20,7 +20,10 @@ const STEP = 5;
 // a pointer: it's a native role="slider" (arrow keys / Home / End), and the
 // Original/Split/Vector buttons below give a no-drag way to reach every
 // state the handle can — see accessibility notes in the phase brief.
-export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width, height, background, sizeMode = "fit" }: CompareSliderProps) {
+// Memoized: zoom steps re-render the parent every frame while dragging, but
+// only change the stage's width — the comparison itself has nothing new to
+// render, so skipping it keeps zoom dragging smooth.
+export const CompareSlider = memo(function CompareSlider({ originalUrl, originalFilename, svgMarkup, width, height, background, sizeMode = "fit" }: CompareSliderProps) {
   const [position, setPosition] = useState(50);
   const frameRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -177,4 +180,4 @@ export function CompareSlider({ originalUrl, originalFilename, svgMarkup, width,
       </div>
     </div>
   );
-}
+});
