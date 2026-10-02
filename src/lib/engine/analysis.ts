@@ -32,6 +32,16 @@ export interface PaletteResult {
   // Share of opaque pixels the palette accounts for. Flat art is ~1.0;
   // gradients and photographs spread across many colors and score low.
   coverage: number;
+  // Colors that are mostly anti-aliasing blends (see dropBlends), appended at
+  // the end of `palette`. snapLabels resolves them pixel by pixel.
+  blends: BlendInfo | null;
+}
+
+export interface BlendInfo {
+  // Index in the palette of the first blend color; all after it are blends.
+  start: number;
+  // For each blend color, the palette indices of the two fills it mixes.
+  parents: [number, number][];
 }
 
 const ALPHA_CUTOFF = 24;
@@ -65,7 +75,7 @@ function dist4(a: PaletteColor, b: PaletteColor): number {
 // resolution than brightness), so a looser line is accepted when the color
 // has next to no solid area at all.
 const BLEND_RESIDUAL = 16;
-const BLEND_MAX_INTERIOR = 0.35;
+const BLEND_MAX_INTERIOR = 0.25;
 const LOSSY_BLEND_RESIDUAL = 40;
 const LOSSY_BLEND_MAX_INTERIOR = 0.15;
 const BLEND_MIN_MIX = 0.08;
@@ -115,12 +125,23 @@ function nearestIndex(data: Uint8ClampedArray, i: number, palette: PaletteColor[
 
 // How the (sampled) pixels nearest to palette[index] sit in the image:
 // `interior` = share whose whole 3x3 neighborhood is the same color (near zero
-// for a band, high for a real area); `flanked` = share with BOTH colors of the
-// suspected mix within FLANK_RADIUS. An edge blend lies between its two
-// parents; a thin line of the same color (a grey hairline on white) has the
-// same parent on both sides, so it isn't flanked and is kept. Indices of -1
-// mean transparent.
-const FLANK_RADIUS = 3;
+// for a band, high for a real area); `flanked` = share lying between the two
+// colors of the suspected mix, one on each side (see FLANK_RADIUS). An edge
+// blend lies between its two parents; a thin line of the same color (a grey
+// hairline on white) has the same color on both sides, so it isn't flanked and
+// is kept. Indices of -1 mean transparent; -2 is "nothing within reach".
+// How far a blend pixel looks, each way, for the fills it lies between; the
+// walk stops at the first stronger fill, so a long reach only lets wide (soft
+// or blurred) ramps resolve.
+const FLANK_RADIUS = 6;
+// Ringing: how close to its host a fringe pixel must be.
+const RING_RADIUS = 3;
+const FLANK_DIRECTIONS: [number, number][] = [
+  [1, 0],
+  [0, 1],
+  [1, 1],
+  [1, -1],
+];
 const BLEND_MIN_FLANKED = 0.5;
 const BLEND_MAX_PAIRS = 3;
 
@@ -131,7 +152,10 @@ function bandStats(
   palette: PaletteColor[],
   index: number,
   endA: number,
-  endB: number
+  // null: only endA is required nearby (see LOSSY_RING_*).
+  endB: number | null,
+  // Colors already found to be blends: stepped over like weaker colors.
+  blendIndices: ReadonlySet<number> = new Set()
 ): { interior: number; flanked: number } {
   const stride = sampleStride(width * height);
   let total = 0;
@@ -153,29 +177,72 @@ function bandStats(
       }
     }
     if (solid) interior += 1;
-    let seenA = false;
-    let seenB = false;
-    for (let qy = Math.max(0, y - FLANK_RADIUS); qy <= Math.min(height - 1, y + FLANK_RADIUS) && !(seenA && seenB); qy++) {
-      for (let qx = Math.max(0, x - FLANK_RADIUS); qx <= Math.min(width - 1, x + FLANK_RADIUS); qx++) {
-        const l = nearestIndex(data, (qy * width + qx) * 4, palette);
-        if (l === endA) seenA = true;
-        else if (l === endB) seenB = true;
+    if (endB === null) {
+      // Ringing: endA anywhere within RING_RADIUS.
+      let near = false;
+      for (let qy = Math.max(0, y - RING_RADIUS); qy <= Math.min(height - 1, y + RING_RADIUS) && !near; qy++) {
+        for (let qx = Math.max(0, x - RING_RADIUS); qx <= Math.min(width - 1, x + RING_RADIUS); qx++) {
+          if (nearestIndex(data, (qy * width + qx) * 4, palette) === endA) {
+            near = true;
+            break;
+          }
+        }
+      }
+      if (near) flanked += 1;
+    } else {
+      // Blend: endA on one side and endB on the other, along some direction.
+      // A thin line of this color drawn over one fill has that fill on both
+      // sides, so it isn't flanked even where the other fill shows up nearby.
+      const firstOther = (dx: number, dy: number) => {
+        for (let k = 1; k <= FLANK_RADIUS; k++) {
+          const qx = x + dx * k;
+          const qy = y + dy * k;
+          if (qx < 0 || qy < 0 || qx >= width || qy >= height) return -2;
+          const l = nearestIndex(data, (qy * width + qx) * 4, palette);
+          // Weaker colors (later in the palette) and known blends are stepped
+          // over: a wide ramp holds several blend bands side by side.
+          if (l !== index && l < index && !blendIndices.has(l)) return l;
+        }
+        return -2;
+      };
+      for (const [dx, dy] of FLANK_DIRECTIONS) {
+        const ahead = firstOther(dx, dy);
+        const behind = firstOther(-dx, -dy);
+        if ((ahead === endA && behind === endB) || (ahead === endB && behind === endA)) {
+          flanked += 1;
+          break;
+        }
       }
     }
-    if (seenA && seenB) flanked += 1;
   }
   return total === 0 ? { interior: 0, flanked: 0 } : { interior: interior / total, flanked: flanked / total };
 }
+
+// Lossy compression (JPEG, lossy WebP) also leaves ringing: a shifted copy of
+// a fill smeared along that fill's edges (a darker purple fringing a purple
+// shape). It is not a mix of two fills, so the blend test misses it, but it
+// has the same tell: no solid area of its own, and nearly every pixel of it
+// hugs the fill it came from. A real shade next to its base color (a shadow,
+// a highlight) has a body of its own and is kept. Only applied to lossy
+// sources: in a PNG the same pattern is more likely a deliberate thin outline.
+const LOSSY_RING_MAX_DISTANCE = 90;
+const LOSSY_RING_MAX_INTERIOR = 0.1;
+const LOSSY_RING_MIN_NEAR_HOST = 0.75;
+const LOSSY_RING_MIN_HOST_INTERIOR = 0.6;
 
 function dropBlends(
   kept: { color: PaletteColor; count: number }[],
   data: Uint8ClampedArray,
   width: number,
   height: number,
-  hasTransparent: boolean
-): { color: PaletteColor; count: number }[] {
+  hasTransparent: boolean,
+  lossy: boolean
+): { real: { color: PaletteColor; count: number }[]; blends: { color: PaletteColor; parents: [PaletteColor, PaletteColor] }[] } {
   const palette = kept.map((k) => k.color);
   const real: { color: PaletteColor; count: number }[] = [];
+  const blends: { color: PaletteColor; parents: [PaletteColor, PaletteColor] }[] = [];
+  const hostInteriors = new Map<number, number>();
+  const blendIndices = new Set<number>();
   kept.forEach((c, index) => {
     // Candidate parents: the stronger fills kept so far (-1 = transparent).
     const ends = real.map((r) => palette.indexOf(r.color));
@@ -193,14 +260,43 @@ function dropBlends(
     // where the color actually is.
     pairs.sort((x, y) => x.residual - y.residual);
     for (const pair of pairs.slice(0, BLEND_MAX_PAIRS)) {
-      const { interior, flanked } = bandStats(data, width, height, palette, index, pair.a, pair.b);
+      const { interior, flanked } = bandStats(data, width, height, palette, index, pair.a, pair.b, blendIndices);
       const thin = pair.residual <= BLEND_RESIDUAL ? interior < BLEND_MAX_INTERIOR : interior < LOSSY_BLEND_MAX_INTERIOR;
       if (!thin) break;
-      if (flanked >= BLEND_MIN_FLANKED) return;
+      if (flanked >= BLEND_MIN_FLANKED) {
+        blends.push({ color: c.color, parents: [colorOf(pair.a), colorOf(pair.b)] });
+        blendIndices.add(index);
+        return;
+      }
+    }
+    if (lossy) {
+      let host = -1;
+      let hostDistance = LOSSY_RING_MAX_DISTANCE * LOSSY_RING_MAX_DISTANCE;
+      for (const r of real) {
+        const d = (r.color.r - c.color.r) ** 2 + (r.color.g - c.color.g) ** 2 + (r.color.b - c.color.b) ** 2;
+        if (d <= hostDistance) {
+          hostDistance = d;
+          host = palette.indexOf(r.color);
+        }
+      }
+      if (host >= 0) {
+        const { interior, flanked } = bandStats(data, width, height, palette, index, host, null);
+        if (interior <= LOSSY_RING_MAX_INTERIOR && flanked >= LOSSY_RING_MIN_NEAR_HOST) {
+          // Ringing fringes a solid fill. In a photograph nothing is solid and
+          // every tone hugs its neighbors, so there the rule would just strip
+          // shading.
+          let hostInterior = hostInteriors.get(host);
+          if (hostInterior === undefined) {
+            hostInterior = bandStats(data, width, height, palette, host, host, null).interior;
+            hostInteriors.set(host, hostInterior);
+          }
+          if (hostInterior >= LOSSY_RING_MIN_HOST_INTERIOR) return;
+        }
+      }
     }
     real.push(c);
   });
-  return real;
+  return { real, blends };
 }
 
 function sampleStride(pixelCount: number): number {
@@ -211,7 +307,17 @@ function sampleStride(pixelCount: number): number {
 // bins (16 levels per channel, 8 alpha levels); each bin's color is the exact
 // most-common source color when one clearly dominates (flat art: the true
 // fill, no averaging drift) and the mean otherwise (noisy sources).
-export function buildPalette(data: Uint8ClampedArray, spec: PaletteSpec, width: number, height: number): PaletteResult | null {
+export function buildPalette(
+  data: Uint8ClampedArray,
+  spec: PaletteSpec,
+  width: number,
+  height: number,
+  // The source was lossily compressed (see LOSSY_RING_*).
+  lossy = false,
+  // Below this coverage the caller won't use the palette as flat art (or,
+  // Infinity, doesn't want blend analysis at all), so it is skipped.
+  minCoverage = 0
+): PaletteResult | null {
   const stride = sampleStride(data.length / 4);
   interface Bin {
     count: number;
@@ -324,12 +430,17 @@ export function buildPalette(data: Uint8ClampedArray, spec: PaletteSpec, width: 
   // Coverage is measured before blends are dropped: blend pixels are edges
   // of the fills above, so they still count as explained by them.
   const hasTransparent = transparent / (total + transparent) >= 0.0005;
-  const palette = dropBlends(kept, data, width, height, hasTransparent).map((k) => k.color);
+  const coverage = covered / total;
+  const split = coverage >= minCoverage ? dropBlends(kept, data, width, height, hasTransparent, lossy) : { real: kept, blends: [] };
+  const palette = split.real.map((k) => k.color);
   // Transparent pixels are a "color" too: without an explicit entry the
   // tracer would assign them to the nearest translucent fill and paint the
   // whole background.
-  if (hasTransparent) palette.push({ ...TRANSPARENT });
-  return { palette, coverage: covered / total };
+  if (hasTransparent) palette.push(TRANSPARENT);
+  const start = palette.length;
+  const parents = split.blends.map((b) => b.parents.map((c) => palette.indexOf(c)) as [number, number]);
+  palette.push(...split.blends.map((b) => b.color));
+  return { palette, coverage, blends: split.blends.length > 0 ? { start, parents } : null };
 }
 
 // Snap every pixel to a palette color so the tracer sees exactly the fills
@@ -346,7 +457,8 @@ export function snapLabels(
   width: number,
   height: number,
   tolerance: number,
-  smoothing = 0
+  smoothing = 0,
+  blends: BlendInfo | null = null
 ): Int16Array {
   const n = width * height;
   const label = new Int16Array(n).fill(-1);
@@ -357,11 +469,11 @@ export function snapLabels(
   const confident: number[] = [];
   for (let p = 0, i = 0; p < n; p++, i += 4) {
     const a = data[i + 3];
-    if (a < ALPHA_CUTOFF) {
-      if (transparentIndex >= 0) {
-        label[p] = transparentIndex;
-        confident.push(p);
-      }
+    // Without a transparent entry (too few transparent pixels to earn one, or
+    // none sampled) a near-transparent pixel is matched like any other.
+    if (a < ALPHA_CUTOFF && transparentIndex >= 0) {
+      label[p] = transparentIndex;
+      confident.push(p);
       continue;
     }
     const r = data[i];
@@ -386,6 +498,47 @@ export function snapLabels(
       // Remember the nearest color in case no confident neighbor ever reaches
       // this pixel (an image with no confident pixels at all).
       label[p] = -2 - Math.max(best, 0);
+    }
+  }
+
+  // Blend colors (see BlendInfo) are only edges where they actually sit
+  // between their two parent fills, one on each side: those pixels become
+  // in-between pixels, resolved below like any other edge. Elsewhere (grey
+  // lettering on a white cup, while the same grey also blends black lines
+  // into the background) the color is real and the pixel keeps it.
+  if (blends) {
+    const firstOther = (x: number, y: number, dx: number, dy: number, own: number) => {
+      for (let k = 1; k <= FLANK_RADIUS; k++) {
+        const qx = x + dx * k;
+        const qy = y + dy * k;
+        if (qx < 0 || qy < 0 || qx >= width || qy >= height) return -2;
+        const l = label[qy * width + qx];
+        if (l === own || l < 0 || l >= blends.start) continue;
+        return l;
+      }
+      return -2;
+    };
+    const demoted: number[] = [];
+    for (let p = 0; p < n; p++) {
+      const l = label[p];
+      if (l < blends.start) continue;
+      const [a, b] = blends.parents[l - blends.start];
+      const x = p % width;
+      const y = (p - x) / width;
+      for (const [dx, dy] of FLANK_DIRECTIONS) {
+        const ahead = firstOther(x, y, dx, dy, l);
+        const behind = firstOther(x, y, -dx, -dy, l);
+        if ((ahead === a && behind === b) || (ahead === b && behind === a)) {
+          demoted.push(p);
+          break;
+        }
+      }
+    }
+    for (const p of demoted) label[p] = -2 - blends.parents[label[p] - blends.start][0];
+    if (demoted.length > 0) {
+      let kept = 0;
+      for (const p of confident) if (label[p] >= 0) confident[kept++] = p;
+      confident.length = kept;
     }
   }
 
@@ -539,6 +692,31 @@ export function refineLabels(
   const outH = height * factor;
   const out = new Int16Array(outW * outH);
   const pm = palette.map(premultiplied);
+  // One-pixel-thin lines (a pixel unlike both neighbors on an axis, but
+  // continued by a same-colored neighbor) keep their whole pixel: re-deciding
+  // them at the 50% point would shrink a faint hairline to a sub-pixel sliver
+  // that the smoothing below then erases. A lone speck (no same-colored
+  // neighbor at all) is left to the smoothing, as noise.
+  const thin = new Uint8Array(width * height);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const p = y * width + x;
+      const l = label[p];
+      const acrossX = label[p - 1] !== l && label[p + 1] !== l;
+      const acrossY = label[p - width] !== l && label[p + width] !== l;
+      if (!acrossX && !acrossY) continue;
+      let continued = false;
+      for (let dy = -1; dy <= 1 && !continued; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if ((dx !== 0 || dy !== 0) && label[p + dy * width + dx] === l) {
+            continued = true;
+            break;
+          }
+        }
+      }
+      if (continued) thin[p] = 1;
+    }
+  }
   const px = [0, 0, 0, 0];
   const cands: number[] = [];
   for (let y = 0; y < outH; y++) {
@@ -557,6 +735,11 @@ export function refineLabels(
       const p11 = y1 * width + x1;
       const l00 = label[p00];
       const o = y * outW + x;
+      const own = Math.floor(y / factor) * width + Math.floor(x / factor);
+      if (thin[own]) {
+        out[o] = label[own];
+        continue;
+      }
       if (l00 === label[p01] && l00 === label[p10] && l00 === label[p11]) {
         out[o] = l00;
         continue;
@@ -603,69 +786,10 @@ export function refineLabels(
   }
   // Each boundary pixel above is decided on its own, which leaves single
   // sub-pixel bumps along edges for the tracer to chase. Smoothing below a
-  // source pixel's size removes them; a one-pixel source line is `factor`
-  // sub-pixels wide and survives.
+  // source pixel's size removes them; a one-pixel source line is kept
+  // `factor` sub-pixels wide above, and survives.
   majorityFilter(out, outW, outH, palette.length, factor - 1);
   return paintLabels(out, palette);
-}
-
-// Bilinear upscale by an integer factor (premultiplied, so an edge fading to
-// transparent doesn't pick up a dark fringe). Monochrome thresholds this
-// directly: thresholding interpolated brightness is the two-color case of
-// refineLabels.
-export function upscaleBilinear(data: Uint8ClampedArray, width: number, height: number, factor: number): Uint8ClampedArray {
-  if (factor === 1) return data;
-  const outW = width * factor;
-  const outH = height * factor;
-  const out = new Uint8ClampedArray(outW * outH * 4);
-  for (let y = 0; y < outH; y++) {
-    const sy = Math.min(height - 1, Math.max(0, (y + 0.5) / factor - 0.5));
-    const y0 = Math.floor(sy);
-    const y1 = Math.min(height - 1, y0 + 1);
-    const fy = sy - y0;
-    for (let x = 0; x < outW; x++) {
-      const sx = Math.min(width - 1, Math.max(0, (x + 0.5) / factor - 0.5));
-      const x0 = Math.floor(sx);
-      const x1 = Math.min(width - 1, x0 + 1);
-      const fx = sx - x0;
-      const ps = [y0 * width + x0, y0 * width + x1, y1 * width + x0, y1 * width + x1];
-      const w = [(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy];
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      for (let k = 0; k < 4; k++) {
-        const i = ps[k] * 4;
-        const m = (data[i + 3] / 255) * w[k];
-        r += data[i] * m;
-        g += data[i + 1] * m;
-        b += data[i + 2] * m;
-        a += data[i + 3] * w[k];
-      }
-      const o = (y * outW + x) * 4;
-      out[o + 3] = a;
-      if (a > 0) {
-        const un = 255 / a;
-        out[o] = r * un;
-        out[o + 1] = g * un;
-        out[o + 2] = b * un;
-      }
-    }
-  }
-  return out;
-}
-
-// The same sub-pixel smoothing as refineLabels, for an ink/background bitmap
-// (Monochrome thresholds an enlarged image directly).
-export function smoothMonochrome(pixels: Uint8ClampedArray, width: number, height: number, passes: number): Uint8ClampedArray {
-  if (passes <= 0) return pixels;
-  const label = new Int16Array(width * height);
-  for (let p = 0; p < label.length; p++) label[p] = pixels[p * 4] === 0 ? 0 : 1;
-  majorityFilter(label, width, height, 2, passes);
-  return paintLabels(label, [
-    { r: 0, g: 0, b: 0, a: 255 },
-    { r: 255, g: 255, b: 255, a: 255 },
-  ]);
 }
 
 // ---- Monochrome preparation -------------------------------------------------
@@ -673,9 +797,14 @@ export function smoothMonochrome(pixels: Uint8ClampedArray, width: number, heigh
 // Monochrome preset. Steps: composite over white (so transparency reads as
 // background), pick an Otsu threshold on luminance, then decide which class is
 // the *background* from the image border — so a white logo on black and a
-// black logo on white both come out as "ink on background". Ink is always
-// painted black, background white; the tracer then sees exactly two colors.
-export function prepareMonochrome(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+// black logo on white both come out as "ink on background". Painted with
+// MONOCHROME_PALETTE (black ink, white background) the tracer sees exactly two
+// colors.
+export function prepareMonochrome(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): { levels: Uint8ClampedArray; labels: Int16Array } {
   const n = width * height;
   const lum = new Uint8Array(n);
   const hist = new Uint32Array(256);
@@ -723,15 +852,40 @@ export function prepareMonochrome(data: Uint8ClampedArray, width: number, height
     probe(width - 1, y);
   }
   const darkIsBackground = borderTotal > 0 && borderDark / borderTotal > 0.5;
-  const out = new Uint8ClampedArray(data.length);
+  // Each pixel's decision (0 = ink, 1 = background), plus a level for
+  // refineLabels: brightness rescaled so the ink class's average is 0 and the
+  // background's is 255. Edges then land midway between what ink and
+  // background actually look like — not at the threshold, which for faint ink
+  // (light grey lines) sits right on the ink and would thin every line.
+  let darkSum = 0;
+  let darkCount = 0;
+  let lightSum = 0;
+  for (let p = 0; p < n; p++) {
+    if (lum[p] <= threshold) {
+      darkSum += lum[p];
+      darkCount += 1;
+    } else lightSum += lum[p];
+  }
+  const darkMean = darkCount > 0 ? darkSum / darkCount : 0;
+  const lightMean = n - darkCount > 0 ? lightSum / (n - darkCount) : 255;
+  const inkMean = darkIsBackground ? lightMean : darkMean;
+  const paperMean = darkIsBackground ? darkMean : lightMean;
+  const span = paperMean - inkMean || 1;
+  const levels = new Uint8ClampedArray(data.length);
+  const labels = new Int16Array(n);
   for (let p = 0, i = 0; p < n; p++, i += 4) {
     const isDark = lum[p] <= threshold;
-    const ink = darkIsBackground ? !isDark : isDark;
-    const v = ink ? 0 : 255;
-    out[i] = v;
-    out[i + 1] = v;
-    out[i + 2] = v;
-    out[i + 3] = 255;
+    labels[p] = (darkIsBackground ? !isDark : isDark) ? 0 : 1;
+    const v = ((lum[p] - inkMean) / span) * 255;
+    levels[i] = v;
+    levels[i + 1] = v;
+    levels[i + 2] = v;
+    levels[i + 3] = 255;
   }
-  return out;
+  return { levels, labels };
 }
+
+export const MONOCHROME_PALETTE: PaletteColor[] = [
+  { r: 0, g: 0, b: 0, a: 255 },
+  { r: 255, g: 255, b: 255, a: 255 },
+];

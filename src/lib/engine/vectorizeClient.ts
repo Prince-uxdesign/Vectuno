@@ -1,6 +1,6 @@
 import { AppError, ConversionCancelled, type ConversionOptions, type ConversionResult, type DecodedImage } from "../../types";
 import { optimizeSvg, type CleanupConfig } from "./optimizeSvg";
-import { getPreset, planTrace, type PresetConfig, type TracePlan } from "./presets";
+import { getPreset, type PresetConfig, type TracePlan } from "./presets";
 import type { VectorizeFailure, VectorizeRequest, VectorizeSuccess } from "./vectorize.worker";
 
 const WORKER_TIMEOUT_MS = 30_000;
@@ -58,13 +58,11 @@ export function traceRaw(
     };
     signal?.addEventListener("abort", onAbort);
 
-    const plan = planTrace(config, colorCount, decoded.imageData);
-
     worker.onmessage = (event: MessageEvent<VectorizeSuccess | VectorizeFailure>) => {
       cleanup();
       const msg = event.data;
       if (msg.ok) {
-        resolve({ svg: msg.svg, elapsedMs: msg.elapsedMs, plan });
+        resolve({ svg: msg.svg, elapsedMs: msg.elapsedMs, plan: msg.plan });
       } else {
         reject(new AppError("VECTORIZE_FAILED", "Vectuno couldn't convert this image.", "Try again, or choose a different image."));
       }
@@ -101,13 +99,10 @@ export function traceRaw(
         height: decoded.imageData.height,
         data: decoded.imageData.data,
       },
-      options: plan.tracer,
-      cleanup: clean ? { cleanup: clean.cleanup, hasTransparency: decoded.hasTransparency, flat: plan.palette !== null } : undefined,
-      palette: plan.palette,
-      snapTolerance: plan.snapTolerance,
-      smoothing: plan.smoothing,
-      mono: plan.mono,
-      supersample: plan.supersample,
+      config,
+      colorCount,
+      lossy: decoded.detectedMime !== "image/png",
+      cleanup: clean ? { cleanup: clean.cleanup, hasTransparency: decoded.hasTransparency } : undefined,
     };
     worker.postMessage(request);
   });

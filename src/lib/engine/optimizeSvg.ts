@@ -46,7 +46,7 @@ function addViewBox(svg: string): string {
   return svg.replace(/<svg\b/, `<svg viewBox="0 0 ${width} ${height}"`);
 }
 
-// A supersampled trace (see analysis.upscaleBilinear) comes back in the
+// A supersampled trace (see analysis.refineLabels) comes back in the
 // enlarged pixel space; divide every coordinate and the canvas size back down.
 // Done here rather than with imagetracer's own `scale` option because the
 // library rounds hole outlines to whole (scaled) pixels, which would put the

@@ -1,6 +1,7 @@
 import type { PresetId } from "../../types";
-import { buildPalette, supersampleFactor, type PaletteColor, type PaletteSpec } from "./analysis";
+import { buildPalette, supersampleFactor, type BlendInfo, type PaletteColor, type PaletteSpec } from "./analysis";
 import type { CleanupConfig } from "./optimizeSvg";
+import { analyzeQuality, TOP_COVERAGE_PHOTO_MAX } from "../image/quality";
 
 // imagetracerjs option shape (subset used here). Untyped upstream, so we
 // declare the fields we rely on rather than pulling in a loose `any` type.
@@ -150,6 +151,8 @@ export interface TracePlan {
   tracer: ImageTracerOptions;
   // Flat art: the exact fills to snap pixels to before tracing.
   palette: PaletteColor[] | null;
+  // Which of those fills are anti-aliasing blends (see analysis.BlendInfo).
+  blends: BlendInfo | null;
   snapTolerance: number;
   smoothing: number;
   // Threshold to an ink/background bitmap before tracing.
@@ -174,9 +177,15 @@ function superTracer(config: PresetConfig, tracer: ImageTracerOptions, factor: n
 export function planTrace(
   config: PresetConfig,
   colorCount: number | null,
-  image: { data: Uint8ClampedArray; width: number; height: number }
+  image: { data: Uint8ClampedArray; width: number; height: number },
+  // JPEG / WebP: compression ringing can be told apart from real fills.
+  lossy = false
 ): TracePlan {
-  const factor = supersampleFactor(image.width, image.height);
+  // Photographs and gradients have no crisp edges or anti-aliasing to
+  // recover, only noise: supersampling and blend analysis would just keep
+  // more of it. They are traced as before.
+  const photographic = analyzeQuality(image.data, image.width, image.height).topCoverage < TOP_COVERAGE_PHOTO_MAX;
+  const factor = photographic ? 1 : supersampleFactor(image.width, image.height);
   const base = {
     pathomit: config.tracer.pathomit,
     ltres: config.tracer.ltres,
@@ -200,6 +209,7 @@ export function planTrace(
         ],
       }, factor),
       palette: null,
+      blends: null,
       snapTolerance: 0,
       smoothing: 0,
       mono: true,
@@ -208,21 +218,22 @@ export function planTrace(
   }
 
   if (colorCount !== null) {
-    return { tracer: { ...base, numberofcolors: clampColors(colorCount) }, palette: null, snapTolerance: 0, smoothing: 0, mono: false, supersample: 1 };
+    return { tracer: { ...base, numberofcolors: clampColors(colorCount) }, palette: null, blends: null, snapTolerance: 0, smoothing: 0, mono: false, supersample: 1 };
   }
 
-  const found = buildPalette(image.data, config.palette, image.width, image.height);
+  const found = buildPalette(image.data, config.palette, image.width, image.height, lossy, photographic ? Infinity : config.flatCoverage);
   if (found && found.palette.length >= 1 && found.coverage >= config.flatCoverage) {
     return {
       // One refinement pass: with pixels already snapped to the palette the
       // fills are exact, so more passes could only drift them.
       tracer: superTracer(config, { ...base, colorquantcycles: 1, numberofcolors: found.palette.length, pal: found.palette }, factor),
       palette: found.palette,
+      blends: found.blends,
       snapTolerance: config.palette.snapTolerance,
       smoothing: config.palette.smoothing,
       mono: false,
       supersample: factor,
     };
   }
-  return { tracer: { ...base, numberofcolors: config.palette.maxColors }, palette: null, snapTolerance: 0, smoothing: 0, mono: false, supersample: 1 };
+  return { tracer: { ...base, numberofcolors: config.palette.maxColors }, palette: null, blends: null, snapTolerance: 0, smoothing: 0, mono: false, supersample: 1 };
 }

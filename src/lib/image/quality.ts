@@ -24,7 +24,7 @@ export const TINY_LONGEST_SIDE_PX = 128;
 // - detailed illustration: distinct 495, coverage 0.88 -> flagged (2nd rule)
 // - gradient: distinct 133, coverage 0.19 -> flagged (1st rule)
 // - photograph: distinct 511, coverage 0.33 -> flagged (1st rule)
-const TOP_COVERAGE_PHOTO_MAX = 0.8;
+export const TOP_COVERAGE_PHOTO_MAX = 0.8;
 const COMPLEX_DISTINCT_MIN = 450;
 const COMPLEX_TOP_COVERAGE_MAX = 0.92;
 const SAMPLE_BUDGET = 60_000;

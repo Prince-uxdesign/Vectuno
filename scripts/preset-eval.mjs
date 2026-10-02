@@ -113,7 +113,7 @@ await page.evaluate(() => {
     // is meant to reproduce, not against the colour original.
     const isMono = presetId === "monochrome";
     const refData = isMono
-      ? new ImageData(analysis.prepareMonochrome(decoded.imageData.data, W, H), W, H)
+      ? new ImageData(new Uint8ClampedArray([...analysis.prepareMonochrome(decoded.imageData.data, W, H).labels].flatMap((l) => (l === 0 ? [0, 0, 0, 255] : [255, 255, 255, 255]))), W, H)
       : decoded.imageData;
     srcCanvas.getContext("2d").putImageData(refData, 0, 0);
     const reference = (scale, bg) => {
