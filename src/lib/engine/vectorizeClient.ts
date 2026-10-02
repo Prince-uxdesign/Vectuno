@@ -58,7 +58,7 @@ export function traceRaw(
     };
     signal?.addEventListener("abort", onAbort);
 
-    const plan = planTrace(config, colorCount, decoded.imageData.data);
+    const plan = planTrace(config, colorCount, decoded.imageData);
 
     worker.onmessage = (event: MessageEvent<VectorizeSuccess | VectorizeFailure>) => {
       cleanup();
@@ -107,6 +107,7 @@ export function traceRaw(
       snapTolerance: plan.snapTolerance,
       smoothing: plan.smoothing,
       mono: plan.mono,
+      supersample: plan.supersample,
     };
     worker.postMessage(request);
   });

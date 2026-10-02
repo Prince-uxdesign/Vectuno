@@ -46,6 +46,22 @@ function addViewBox(svg: string): string {
   return svg.replace(/<svg\b/, `<svg viewBox="0 0 ${width} ${height}"`);
 }
 
+// A supersampled trace (see analysis.upscaleBilinear) comes back in the
+// enlarged pixel space; divide every coordinate and the canvas size back down.
+// Done here rather than with imagetracer's own `scale` option because the
+// library rounds hole outlines to whole (scaled) pixels, which would put the
+// staircase right back. Stroke widths are deliberately left alone: the seal
+// stroke is meant to be 1px in the final artwork.
+export function rescaleTrace(svg: string, factor: number): string {
+  if (factor === 1) return svg;
+  const scale = (v: string) => String(Math.round((Number(v) / factor) * 10) / 10);
+  return svg
+    .replace(/<svg\b[^>]*>/, (tag) =>
+      tag.replace(/\s(width|height)="([\d.]+)"/g, (_m, attr: string, v: string) => ` ${attr}="${Number(v) / factor}"`)
+    )
+    .replace(/\bd="([^"]*)"/g, (_m, d: string) => `d="${d.replace(/-?\d+(?:\.\d+)?/g, scale)}"`);
+}
+
 interface Box {
   minX: number;
   maxX: number;

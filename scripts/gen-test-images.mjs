@@ -303,4 +303,25 @@ await fromSvg(
   500, 500
 );
 
+// 21-24. A basic anti-aliased app icon, plus the ways real-world icons
+// arrive softened: upscaled from a small export, re-saved as JPEG, blurred.
+// Their edge blends are wide enough to pass for fills, which used to trace
+// as halo rings of extra paths, and their snapped edges as jitter.
+const ICON = svgWrap(512, 512, `
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="#4F46E5"/>
+  <circle cx="256" cy="230" r="130" fill="#FBBF24"/>
+  <path d="M190 232 l45 45 l90 -95" fill="none" stroke="#1F2937" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 380 l14 30 33 4 -24 22 6 33 -29 -16 -29 16 6 -33 -24 -22 33 -4z" fill="#F472B6"/>
+  <ellipse cx="380" cy="120" rx="40" ry="24" transform="rotate(-30 380 120)" fill="#ffffff"/>
+`);
+await fromSvg("21-aa-icon", ICON, 512, 512);
+const iconPng = await fromSvgBuffer(ICON, 512, 512);
+await sharp(await sharp(iconPng).resize(128, 128).png().toBuffer())
+  .resize(512, 512, { kernel: "cubic" })
+  .png()
+  .toFile(`${OUT}/22-soft-icon.png`);
+await sharp(iconPng).flatten({ background: "#ffffff" }).jpeg({ quality: 75 }).toFile(`${OUT}/23-icon.jpg`);
+await sharp(iconPng).blur(1.2).png().toFile(`${OUT}/24-blurred-icon.png`);
+console.log("wrote 21-24 icons");
+
 console.log("done");

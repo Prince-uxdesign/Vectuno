@@ -1,5 +1,5 @@
 import type { PresetId } from "../../types";
-import { buildPalette, type PaletteColor, type PaletteSpec } from "./analysis";
+import { buildPalette, supersampleFactor, type PaletteColor, type PaletteSpec } from "./analysis";
 import type { CleanupConfig } from "./optimizeSvg";
 
 // imagetracerjs option shape (subset used here). Untyped upstream, so we
@@ -32,6 +32,11 @@ export interface PresetConfig {
     // Curve-fitting tolerance: higher = fewer, smoother segments.
     ltres: number;
     qtres: number;
+    // The same tolerance for a supersampled trace (see
+    // analysis.supersampleFactor), as a distance in source pixels.
+    // imagetracer compares ltres/qtres against SQUARED distance, so the
+    // values above are distances of √ltres; these mirror them.
+    superTolerance: number;
     // Palette refinement passes.
     colorquantcycles: number;
     // Decimal places kept in coordinates.
@@ -70,7 +75,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "clean",
     label: "Clean",
     description: "Best for logos and simple graphics.",
-    tracer: { pathomit: 20, ltres: 1.5, qtres: 1.5, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
+    tracer: { pathomit: 20, ltres: 1.5, qtres: 1.5, superTolerance: 1.2, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
     palette: { maxColors: 8, minShare: 0.005, mergeDistance: 40, snapTolerance: 28, smoothing: 1 },
     flatCoverage: 0.88,
     monochrome: false,
@@ -85,7 +90,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "balanced",
     label: "Balanced",
     description: "Great for most images.",
-    tracer: { pathomit: 8, ltres: 0.6, qtres: 0.6, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
+    tracer: { pathomit: 8, ltres: 0.6, qtres: 0.6, superTolerance: 0.8, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
     palette: { maxColors: 20, minShare: 0.003, mergeDistance: 28, snapTolerance: 36, smoothing: 0 },
     flatCoverage: 0.9,
     monochrome: false,
@@ -100,7 +105,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "detailed",
     label: "Detailed",
     description: "Preserve more visual detail.",
-    tracer: { pathomit: 10, ltres: 0.3, qtres: 0.3, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
+    tracer: { pathomit: 10, ltres: 0.3, qtres: 0.3, superTolerance: 0.6, colorquantcycles: 5, roundcoords: 1, strokewidth: 1 },
     palette: { maxColors: 32, minShare: 0.002, mergeDistance: 24, snapTolerance: 36, smoothing: 0 },
     flatCoverage: 0.92,
     monochrome: false,
@@ -115,7 +120,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "monochrome",
     label: "Monochrome",
     description: "Create a single-color vector.",
-    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, colorquantcycles: 1, roundcoords: 1, strokewidth: 0 },
+    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, superTolerance: 0.8, colorquantcycles: 1, roundcoords: 1, strokewidth: 0 },
     palette: { maxColors: 2, minShare: 0, mergeDistance: 0, snapTolerance: 0, smoothing: 0 },
     flatCoverage: 1,
     monochrome: true,
@@ -149,11 +154,29 @@ export interface TracePlan {
   smoothing: number;
   // Threshold to an ink/background bitmap before tracing.
   mono: boolean;
+  // Integer factor the snapped result is refined to and traced at (1 = traced
+  // as is). Only for snapped/thresholded traces: the tracer's own quantizer
+  // would just see an enlarged blur.
+  supersample: number;
+}
+
+// Tracer settings for a trace run at `factor` x the source size: tolerances
+// (squared distances) and the minimum path length are in traced pixels, so
+// they scale with it.
+function superTracer(config: PresetConfig, tracer: ImageTracerOptions, factor: number): ImageTracerOptions {
+  if (factor === 1) return tracer;
+  const tolerance = (config.tracer.superTolerance * factor) ** 2;
+  return { ...tracer, ltres: tolerance, qtres: tolerance, pathomit: config.tracer.pathomit * factor };
 }
 
 // Turns a preset + the actual image into concrete engine settings. Explicit
 // user color counts always win over the automatic palette.
-export function planTrace(config: PresetConfig, colorCount: number | null, data: Uint8ClampedArray): TracePlan {
+export function planTrace(
+  config: PresetConfig,
+  colorCount: number | null,
+  image: { data: Uint8ClampedArray; width: number; height: number }
+): TracePlan {
+  const factor = supersampleFactor(image.width, image.height);
   const base = {
     pathomit: config.tracer.pathomit,
     ltres: config.tracer.ltres,
@@ -168,36 +191,38 @@ export function planTrace(config: PresetConfig, colorCount: number | null, data:
 
   if (config.monochrome) {
     return {
-      tracer: {
+      tracer: superTracer(config, {
         ...base,
         numberofcolors: 2,
         pal: [
           { r: 0, g: 0, b: 0, a: 255 },
           { r: 255, g: 255, b: 255, a: 255 },
         ],
-      },
+      }, factor),
       palette: null,
       snapTolerance: 0,
       smoothing: 0,
       mono: true,
+      supersample: factor,
     };
   }
 
   if (colorCount !== null) {
-    return { tracer: { ...base, numberofcolors: clampColors(colorCount) }, palette: null, snapTolerance: 0, smoothing: 0, mono: false };
+    return { tracer: { ...base, numberofcolors: clampColors(colorCount) }, palette: null, snapTolerance: 0, smoothing: 0, mono: false, supersample: 1 };
   }
 
-  const found = buildPalette(data, config.palette);
+  const found = buildPalette(image.data, config.palette, image.width, image.height);
   if (found && found.palette.length >= 1 && found.coverage >= config.flatCoverage) {
     return {
       // One refinement pass: with pixels already snapped to the palette the
       // fills are exact, so more passes could only drift them.
-      tracer: { ...base, colorquantcycles: 1, numberofcolors: found.palette.length, pal: found.palette },
+      tracer: superTracer(config, { ...base, colorquantcycles: 1, numberofcolors: found.palette.length, pal: found.palette }, factor),
       palette: found.palette,
       snapTolerance: config.palette.snapTolerance,
       smoothing: config.palette.smoothing,
       mono: false,
+      supersample: factor,
     };
   }
-  return { tracer: { ...base, numberofcolors: config.palette.maxColors }, palette: null, snapTolerance: 0, smoothing: 0, mono: false };
+  return { tracer: { ...base, numberofcolors: config.palette.maxColors }, palette: null, snapTolerance: 0, smoothing: 0, mono: false, supersample: 1 };
 }

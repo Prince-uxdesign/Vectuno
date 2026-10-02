@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import ImageTracer from "imagetracerjs";
-import { optimizeSvg, type OptimizeInput } from "./optimizeSvg";
-import { prepareMonochrome, snapToPalette, type PaletteColor } from "./analysis";
+import { optimizeSvg, rescaleTrace, type OptimizeInput } from "./optimizeSvg";
+import { prepareMonochrome, refineLabels, smoothMonochrome, snapLabels, upscaleBilinear, type PaletteColor } from "./analysis";
 import type { ImageTracerOptions } from "./presets";
 
 export interface VectorizeRequest {
@@ -15,6 +15,9 @@ export interface VectorizeRequest {
   smoothing?: number;
   // Monochrome preset: threshold to an ink/background bitmap first.
   mono?: boolean;
+  // Trace at this multiple of the source size, then scale the trace back
+  // (see analysis.refineLabels). Default 1.
+  supersample?: number;
   // When present, the trace is cleaned here (off the UI thread) before it is
   // returned; when absent the raw tracer output is returned untouched.
   cleanup?: OptimizeInput;
@@ -32,18 +35,24 @@ export interface VectorizeFailure {
 }
 
 self.onmessage = (event: MessageEvent<VectorizeRequest>) => {
-  const { imageData, options, palette, snapTolerance, smoothing, mono, cleanup } = event.data;
+  const { imageData, options, palette, snapTolerance, smoothing, mono, supersample, cleanup } = event.data;
   const t0 = performance.now();
   try {
+    const { width, height, data } = imageData;
+    const flat = palette && palette.length > 0;
+    // Supersampling only refines snapped/thresholded traces (see analysis.refineLabels).
+    const factor = mono || flat ? (supersample ?? 1) : 1;
     const pixels = mono
-      ? prepareMonochrome(imageData.data, imageData.width, imageData.height)
-      : palette && palette.length > 0
-        ? snapToPalette(imageData.data, palette, imageData.width, imageData.height, snapTolerance ?? 32, smoothing ?? 0)
-        : imageData.data;
-    const traced = ImageTracer.imagedataToSVG(
-      { width: imageData.width, height: imageData.height, data: pixels },
-      options
-    );
+      ? smoothMonochrome(
+          prepareMonochrome(upscaleBilinear(data, width, height, factor), width * factor, height * factor),
+          width * factor,
+          height * factor,
+          factor - 1
+        )
+      : flat
+        ? refineLabels(data, width, height, snapLabels(data, palette, width, height, snapTolerance ?? 32, smoothing ?? 0), palette, factor)
+        : data;
+    const traced = rescaleTrace(ImageTracer.imagedataToSVG({ width: width * factor, height: height * factor, data: pixels }, options), factor);
     const svg = cleanup ? optimizeSvg(traced, cleanup) : traced;
     const elapsedMs = performance.now() - t0;
     const response: VectorizeSuccess = { ok: true, svg, elapsedMs };
