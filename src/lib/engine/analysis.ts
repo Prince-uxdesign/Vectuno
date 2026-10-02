@@ -601,15 +601,54 @@ export function snapLabels(
   }
   for (let p = 0; p < n; p++) if (label[p] < -1) label[p] = -2 - label[p]; // unreachable leftovers keep their nearest color
 
-  majorityFilter(label, width, height, count, smoothing);
+  // Real one-pixel lines are kept out of the smoothing: it is there for edge
+  // jitter, and once blend pixels beside a line resolve to the background the
+  // line is all that's left of it.
+  majorityFilter(label, width, height, count, smoothing, 5, smoothing > 0 && blends ? thinLines(label, width, height) : null);
 
   return label;
 }
 
+// Pixels on a one-pixel-thin line: unlike both neighbors across the line, and
+// with the line continuing through them (same-colored neighbors on both sides
+// along it). A one-pixel bump off an edge or a lone speck has no continuation
+// on one side, so it isn't protected. Outside the image counts as different,
+// so a line along the border qualifies too.
+function thinLines(label: Int16Array, width: number, height: number): Uint8Array {
+  const thin = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const l = label[p];
+      const same = (dx: number, dy: number) => {
+        const qx = x + dx;
+        const qy = y + dy;
+        return qx >= 0 && qy >= 0 && qx < width && qy < height && label[qy * width + qx] === l;
+      };
+      const acrossX = !same(-1, 0) && !same(1, 0);
+      const acrossY = !same(0, -1) && !same(0, 1);
+      const runsY = (same(-1, -1) || same(0, -1) || same(1, -1)) && (same(-1, 1) || same(0, 1) || same(1, 1));
+      const runsX = (same(-1, -1) || same(-1, 0) || same(-1, 1)) && (same(1, -1) || same(1, 0) || same(1, 1));
+      if ((acrossX && runsY) || (acrossY && runsX)) thin[p] = 1;
+    }
+  }
+  return thin;
+}
+
 // Passes of a 3x3 majority filter over a label map: a pixel switches only when
-// at least 5 of its 9 neighbors (itself included) agree on another label, so
-// one-pixel jitter goes while anything 3+ pixels thick stays.
-function majorityFilter(label: Int16Array, width: number, height: number, count: number, passes: number): void {
+// at least `minVotes` of its 9 neighbors (itself included) agree on another
+// label, so one-pixel jitter goes while anything 3+ pixels thick stays. At 5,
+// convex corners round off by a pixel per pass; at 6 they hold. Pixels marked
+// in `keep` never switch.
+function majorityFilter(
+  label: Int16Array,
+  width: number,
+  height: number,
+  count: number,
+  passes: number,
+  minVotes = 5,
+  keep: Uint8Array | null = null
+): void {
   for (let pass = 0; pass < passes; pass++) {
     const src = label.slice();
     const votes = new Uint16Array(count);
@@ -634,7 +673,7 @@ function majorityFilter(label: Int16Array, width: number, height: number, count:
           }
         }
         // Only a clear majority overrides the pixel's own label.
-        label[p] = bestVotes >= 5 ? best : own;
+        label[p] = bestVotes >= minVotes && !keep?.[p] ? best : own;
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) votes[src[p + dy * width + dx]] = 0;
         }
@@ -665,6 +704,12 @@ function paintLabels(label: Int16Array, palette: PaletteColor[]): Uint8ClampedAr
 // pixels × colors — so large images trace at 1x, where a pixel of jitter is
 // relatively small anyway.
 const SUPERSAMPLE_PIXEL_BUDGET = 2_500_000;
+// A pixel within this (premultiplied RGBA) distance of its fill is that fill,
+// not an edge blend (see refineLabels).
+const PURE_DISTANCE = 12;
+// How many pixels each edge must run straight past a crisp corner for it to
+// be locked (see refineLabels).
+const LOCK_RUN = 1;
 const MAX_SUPERSAMPLE = 3;
 
 export function supersampleFactor(width: number, height: number): number {
@@ -692,29 +737,44 @@ export function refineLabels(
   const outH = height * factor;
   const out = new Int16Array(outW * outH);
   const pm = palette.map(premultiplied);
-  // One-pixel-thin lines (a pixel unlike both neighbors on an axis, but
-  // continued by a same-colored neighbor) keep their whole pixel: re-deciding
-  // them at the 50% point would shrink a faint hairline to a sub-pixel sliver
-  // that the smoothing below then erases. A lone speck (no same-colored
-  // neighbor at all) is left to the smoothing, as noise.
-  const thin = new Uint8Array(width * height);
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
+  // One-pixel-thin lines keep their whole pixel: re-deciding them at the 50%
+  // point would shrink a faint hairline to a sub-pixel sliver that the
+  // smoothing below then erases.
+  const thin = thinLines(label, width, height);
+  // Pixels that already are exactly their fill (crisp art, solid interiors).
+  const pure = new Uint8Array(width * height);
+  for (let p = 0; p < pure.length; p++) {
+    const i = p * 4;
+    const k = data[i + 3] / 255;
+    const c = pm[label[p]];
+    const d = (data[i] * k - c[0]) ** 2 + (data[i + 1] * k - c[1]) ** 2 + (data[i + 2] * k - c[2]) ** 2 + (data[i + 3] - c[3]) ** 2;
+    if (d <= PURE_DISTANCE * PURE_DISTANCE) pure[p] = 1;
+  }
+  // A crisp square corner (a pure pixel where two straight edges, each at
+  // least three pixels long, meet) is locked: the 50% contour of the
+  // interpolation would round it by a sub-pixel and the tracer then cuts
+  // across it, skewing whole sides. The short steps of an aliased diagonal
+  // are corners too, but their runs are short, so they are still refined
+  // into a smooth slope.
+  const lock = new Uint8Array(width * height);
+  const at = (x: number, y: number) => (x >= 0 && y >= 0 && x < width && y < height ? label[y * width + x] : -1);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
       const p = y * width + x;
+      if (!pure[p]) continue;
       const l = label[p];
-      const acrossX = label[p - 1] !== l && label[p + 1] !== l;
-      const acrossY = label[p - width] !== l && label[p + width] !== l;
-      if (!acrossX && !acrossY) continue;
-      let continued = false;
-      for (let dy = -1; dy <= 1 && !continued; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if ((dx !== 0 || dy !== 0) && label[p + dy * width + dx] === l) {
-            continued = true;
-            break;
-          }
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        if (at(x + dx, y) === l || at(x, y + dy) === l) continue;
+        let straight = true;
+        for (let k = 1; k <= LOCK_RUN && straight; k++) {
+          straight =
+            at(x - k * dx, y) === l && at(x - k * dx, y + dy) !== l && at(x, y - k * dy) === l && at(x + dx, y - k * dy) !== l;
+        }
+        if (straight) {
+          lock[p] = 1;
+          break;
         }
       }
-      if (continued) thin[p] = 1;
     }
   }
   const px = [0, 0, 0, 0];
@@ -736,7 +796,7 @@ export function refineLabels(
       const l00 = label[p00];
       const o = y * outW + x;
       const own = Math.floor(y / factor) * width + Math.floor(x / factor);
-      if (thin[own]) {
+      if (thin[own] || lock[own]) {
         out[o] = label[own];
         continue;
       }
@@ -788,7 +848,61 @@ export function refineLabels(
   // sub-pixel bumps along edges for the tracer to chase. Smoothing below a
   // source pixel's size removes them; a one-pixel source line is kept
   // `factor` sub-pixels wide above, and survives.
-  majorityFilter(out, outW, outH, palette.length, factor - 1);
+  // Sub-pixels of locked corners and thin lines are left out of the smoothing
+  // (it would chamfer the one and nibble the other).
+  const settled = new Uint8Array(outW * outH);
+  for (let y = 0; y < outH; y++) {
+    const row = Math.floor(y / factor) * width;
+    for (let x = 0; x < outW; x++) {
+      const own = row + Math.floor(x / factor);
+      if (lock[own] || thin[own]) settled[y * outW + x] = 1;
+    }
+  }
+  majorityFilter(out, outW, outH, palette.length, factor - 1, 5, settled);
+  // Nothing snapping kept may vanish in the refinement or the smoothing. A
+  // one-pixel-thin pixel that lost every sub-pixel and has no solid (pure)
+  // neighbor of its own color is part of a faint feature, such as a very thin
+  // line with no solid pixels at all; it keeps its whole pixel instead.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const l = label[p];
+      // A line lies on one background: across it, the same other color on
+      // both sides. A stray pixel on the edge between two other colors (a
+      // blend snapped to a third) has different colors either side, and
+      // vanishing is right for it.
+      const left = x > 0 ? label[p - 1] : -1;
+      const right = x < width - 1 ? label[p + 1] : -1;
+      const up = y > 0 ? label[p - width] : -1;
+      const down = y < height - 1 ? label[p + width] : -1;
+      const lineX = left !== l && left === right;
+      const lineY = up !== l && up === down;
+      if (!lineX && !lineY) continue;
+      let anchored = false;
+      for (let dy = -1; dy <= 1 && !anchored; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const qx = x + dx;
+          const qy = y + dy;
+          if ((dx || dy) && qx >= 0 && qy >= 0 && qx < width && qy < height && label[qy * width + qx] === l && pure[qy * width + qx]) {
+            anchored = true;
+            break;
+          }
+        }
+      }
+      if (anchored) continue;
+      let kept = false;
+      for (let sy = 0; sy < factor && !kept; sy++) {
+        for (let sx = 0, o = (y * factor + sy) * outW + x * factor; sx < factor; sx++, o++) {
+          if (out[o] === l) {
+            kept = true;
+            break;
+          }
+        }
+      }
+      if (kept) continue;
+      for (let sy = 0; sy < factor; sy++) out.fill(l, (y * factor + sy) * outW + x * factor, (y * factor + sy) * outW + (x + 1) * factor);
+    }
+  }
   return paintLabels(out, palette);
 }
 

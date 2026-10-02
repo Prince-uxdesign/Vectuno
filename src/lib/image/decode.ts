@@ -1,6 +1,6 @@
 import { AppError, type DecodedImage } from "../../types";
 import { validateDimensions } from "./validate";
-import { sniffImageType } from "./sniff";
+import { isLossyEncoding, sniffImageType } from "./sniff";
 import { hasTransparency } from "./transparency";
 
 // Measured on a 4000x3000 synthetic test image: ~5.8s of main-thread tracing work.
@@ -89,6 +89,7 @@ export async function decodeImage(
       processedHeight,
       wasDownsampled: scale < 1,
       detectedMime,
+      lossy: await isLossyEncoding(file, detectedMime),
       // JPEG has no alpha channel, so skip the scan.
       hasTransparency: detectedMime !== "image/jpeg" && hasTransparency(imageData),
     };

@@ -101,7 +101,7 @@ export function traceRaw(
       },
       config,
       colorCount,
-      lossy: decoded.detectedMime !== "image/png",
+      lossy: decoded.lossy,
       cleanup: clean ? { cleanup: clean.cleanup, hasTransparency: decoded.hasTransparency } : undefined,
     };
     worker.postMessage(request);

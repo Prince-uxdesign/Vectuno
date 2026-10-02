@@ -121,7 +121,7 @@ export const PRESETS: Record<PresetId, PresetConfig> = {
     id: "monochrome",
     label: "Monochrome",
     description: "Create a single-color vector.",
-    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, superTolerance: 0.8, colorquantcycles: 1, roundcoords: 1, strokewidth: 0 },
+    tracer: { pathomit: 4, ltres: 0.5, qtres: 0.5, superTolerance: 0.7, colorquantcycles: 1, roundcoords: 1, strokewidth: 0 },
     palette: { maxColors: 2, minShare: 0, mergeDistance: 0, snapTolerance: 0, smoothing: 0 },
     flatCoverage: 1,
     monochrome: true,

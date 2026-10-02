@@ -45,6 +45,9 @@ export interface DecodedImage {
   // Verified from the file's actual bytes (magic numbers), not its name or
   // declared MIME — so the type shown to the user is the type it really is.
   detectedMime: AcceptedMimeType;
+  // The file was lossily compressed (JPEG, lossy WebP): compression artifacts
+  // can be told apart from real color (see engine analysis, LOSSY_RING_*).
+  lossy: boolean;
   // True only if at least one decoded pixel is not fully opaque.
   hasTransparency: boolean;
 }

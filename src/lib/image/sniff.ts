@@ -31,3 +31,28 @@ export async function sniffImageType(file: Blob): Promise<AcceptedMimeType | nul
   }
   return null;
 }
+
+// Whether the file's pixels went through lossy compression. JPEG always does
+// and PNG never does; WebP can be either, told apart by its image chunk:
+// "VP8 " is lossy, "VP8L" lossless (an extended "VP8X" file lists other
+// chunks first, so the chunk list is walked). Unknown -> assume lossy.
+export async function isLossyEncoding(file: Blob, mime: AcceptedMimeType): Promise<boolean> {
+  if (mime === "image/png") return false;
+  if (mime === "image/jpeg") return true;
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await file.slice(0, 65_536).arrayBuffer());
+  } catch {
+    return true;
+  }
+  const fourcc = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  for (let at = 12; at + 8 <= bytes.length; ) {
+    const id = fourcc(at);
+    if (id === "VP8L") return false;
+    if (id === "VP8 ") return true;
+    const size = bytes[at + 4] | (bytes[at + 5] << 8) | (bytes[at + 6] << 16) | (bytes[at + 7] << 24);
+    if (size < 0) break;
+    at += 8 + size + (size & 1);
+  }
+  return true;
+}
