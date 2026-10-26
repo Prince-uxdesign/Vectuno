@@ -22,17 +22,17 @@ export default defineConfig({
         categories: ['design', 'utilities', 'graphics', 'productivity'],
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/pwa-192x192.png?v=2',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/pwa-512x512.png?v=2',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: '/pwa-maskable-512x512.png',
+            src: '/pwa-maskable-512x512.png?v=2',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
