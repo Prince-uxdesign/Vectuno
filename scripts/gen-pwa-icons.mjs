@@ -13,22 +13,22 @@ async function generateIcons() {
   await sharp(svgBuffer)
     .resize(192, 192)
     .png()
-    .toFile(path.join(publicDir, 'pwa-192x192.png'));
-  console.log('Generated pwa-192x192.png');
+    .toFile(path.join(publicDir, 'vectuno-pwa-192-v2.png'));
+  console.log('Generated vectuno-pwa-192-v2.png');
 
   // 512x512 standard icon
   await sharp(svgBuffer)
     .resize(512, 512)
     .png()
-    .toFile(path.join(publicDir, 'pwa-512x512.png'));
-  console.log('Generated pwa-512x512.png');
+    .toFile(path.join(publicDir, 'vectuno-pwa-512-v2.png'));
+  console.log('Generated vectuno-pwa-512-v2.png');
 
   // 180x180 Apple Touch Icon
   await sharp(svgBuffer)
     .resize(180, 180)
     .png()
-    .toFile(path.join(publicDir, 'apple-touch-icon.png'));
-  console.log('Generated apple-touch-icon.png');
+    .toFile(path.join(publicDir, 'vectuno-apple-touch-v2.png'));
+  console.log('Generated vectuno-apple-touch-v2.png');
 
   // The master icon keeps the mark inside the platform-safe center zone
   // while its background remains full bleed for maskable launchers.
@@ -46,8 +46,8 @@ async function generateIcons() {
   })
     .composite([{ input: innerIcon, gravity: 'center' }])
     .png()
-    .toFile(path.join(publicDir, 'pwa-maskable-512x512.png'));
-  console.log('Generated pwa-maskable-512x512.png');
+    .toFile(path.join(publicDir, 'vectuno-pwa-maskable-512-v2.png'));
+  console.log('Generated vectuno-pwa-maskable-512-v2.png');
 }
 
 generateIcons().catch((err) => {

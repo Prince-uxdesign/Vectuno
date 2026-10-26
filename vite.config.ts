@@ -8,8 +8,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'logo-mark.svg', 'app-icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: ['favicon-v2.svg', 'logo-mark.svg', 'app-icon.svg', 'vectuno-apple-touch-v2.png', 'vectuno-pwa-192-v2.png', 'vectuno-pwa-512-v2.png'],
       manifest: {
+        id: '/',
         name: 'Vectuno — Image to Vector',
         short_name: 'Vectuno',
         description: 'Turn PNG, JPG, or WebP images into scalable SVG vectors — converted entirely in your browser.',
@@ -22,17 +23,17 @@ export default defineConfig({
         categories: ['design', 'utilities', 'graphics', 'productivity'],
         icons: [
           {
-            src: '/pwa-192x192.png?v=2',
+            src: '/vectuno-pwa-192-v2.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/pwa-512x512.png?v=2',
+            src: '/vectuno-pwa-512-v2.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: '/pwa-maskable-512x512.png?v=2',
+            src: '/vectuno-pwa-maskable-512-v2.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
