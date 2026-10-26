@@ -3,7 +3,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 const ROOT = process.cwd();
-const svgPath = path.join(ROOT, 'public', 'favicon.svg');
+const svgPath = path.join(ROOT, 'public', 'app-icon.svg');
 const publicDir = path.join(ROOT, 'public');
 
 async function generateIcons() {
@@ -30,9 +30,10 @@ async function generateIcons() {
     .toFile(path.join(publicDir, 'apple-touch-icon.png'));
   console.log('Generated apple-touch-icon.png');
 
-  // 512x512 Maskable icon (with safe padding around the logo so it doesn't get cut by circular masks)
+  // The master icon keeps the mark inside the platform-safe center zone
+  // while its background remains full bleed for maskable launchers.
   const innerIcon = await sharp(svgBuffer)
-    .resize(380, 380, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(512, 512)
     .toBuffer();
 
   await sharp({

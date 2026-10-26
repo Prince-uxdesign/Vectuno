@@ -200,9 +200,8 @@ h3 {
 
 .logo__mark-img {
   display: block;
-  width: 22px;
-  height: auto;
-  aspect-ratio: 48 / 46;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
@@ -2718,8 +2717,8 @@ dialog.pwa-dialog::backdrop {
 
 .pwa-dialog__icon {
   width: 28px;
-  height: auto;
-  aspect-ratio: 48 / 46;
+  height: 28px;
+  border-radius: 6px;
 }
 
 .pwa-dialog__titles {

@@ -76,7 +76,7 @@ export function PwaInstallModal({
         <header className="pwa-dialog__header">
           <div className="pwa-dialog__icon-wrapper" aria-hidden="true">
             <img
-              src={`${import.meta.env.BASE_URL}favicon.svg`}
+              src={`${import.meta.env.BASE_URL}app-icon.svg`}
               alt=""
               width="28"
               height="27"

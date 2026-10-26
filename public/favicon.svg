@@ -1,16 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <style>
-    .pen-body { fill: #252522; }
-    .pen-slit { stroke: #fffcfa; }
-    @media (prefers-color-scheme: dark) {
-      .pen-body { fill: #fffefe; }
-      .pen-slit { stroke: #252522; }
-    }
-  </style>
-  <!-- Pen Nib V Body -->
-  <path class="pen-body" d="M6 7C7.5 10 11 12 16 12C21 12 24.5 10 26 7L17.4 25.4C16.8 26.6 15.2 26.6 14.6 25.4L6 7Z"/>
-  <!-- Pen Center Slit -->
-  <line class="pen-slit" x1="16" y1="12" x2="16" y2="19.5" stroke-width="1.8" stroke-linecap="round"/>
-  <!-- Breather Node Hole in Warm Coral -->
-  <circle cx="16" cy="20.5" r="2.2" fill="#f2805d"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <title>Vectuno</title>
+  <!-- A Bézier curve drawn as a V, with anchor nodes and a pen-nib point. -->
+  <path d="M9 10C12.2 15.2 15.9 24.7 24 36C32.1 24.7 35.8 15.2 39 10" stroke="#f2805d" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="9" cy="10" r="4.25" fill="#252522"/>
+  <circle cx="39" cy="10" r="4.25" fill="#252522"/>
+  <circle cx="9" cy="10" r="1.75" fill="#fffcfa"/>
+  <circle cx="39" cy="10" r="1.75" fill="#fffcfa"/>
+  <path d="M24 29.5L30 35.5L24 43L18 35.5L24 29.5Z" fill="#252522"/>
+  <circle cx="24" cy="35.25" r="1.8" fill="#f2805d"/>
+  <path d="M24 37V41" stroke="#f2805d" stroke-width="1.8" stroke-linecap="round"/>
 </svg>

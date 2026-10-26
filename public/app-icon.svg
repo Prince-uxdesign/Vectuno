@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <title>Vectuno app icon</title>
+  <rect width="512" height="512" rx="112" fill="#fffcfa"/>
+  <path d="M112 112C146 168 186 268 256 380C326 268 366 168 400 112" stroke="#f2805d" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="112" cy="112" r="44" fill="#252522"/>
+  <circle cx="400" cy="112" r="44" fill="#252522"/>
+  <circle cx="112" cy="112" r="18" fill="#fffcfa"/>
+  <circle cx="400" cy="112" r="18" fill="#fffcfa"/>
+  <path d="M256 310L320 374L256 456L192 374L256 310Z" fill="#252522"/>
+  <circle cx="256" cy="372" r="19" fill="#f2805d"/>
+  <path d="M256 391V434" stroke="#f2805d" stroke-width="19" stroke-linecap="round"/>
+</svg>
